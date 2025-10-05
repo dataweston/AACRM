@@ -1,0 +1,74 @@
+@import "tailwindcss";
+
+:root {
+  --background: #fdf8f1;
+  --foreground: #21110c;
+  --card: #ffffff;
+  --card-foreground: #21110c;
+  --popover: #ffffff;
+  --popover-foreground: #21110c;
+  --primary: #c83a2c;
+  --primary-foreground: #fff7f4;
+  --secondary: #f9dfb1;
+  --secondary-foreground: #4a2b1f;
+  --muted: #f4e8dc;
+  --muted-foreground: #705c51;
+  --accent: #f9dfb1;
+  --accent-foreground: #3d1f16;
+  --destructive: #b3261e;
+  --destructive-foreground: #fef2f2;
+  --border: rgba(33, 17, 12, 0.08);
+  --input: rgba(33, 17, 12, 0.12);
+  --ring: #c83a2c;
+  --radius: 0.75rem;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --radius-base: var(--radius);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #160a07;
+    --foreground: #f8e9e4;
+    --card: #21110c;
+    --card-foreground: #f8e9e4;
+    --popover: #21110c;
+    --popover-foreground: #f8e9e4;
+    --secondary: #36231d;
+    --secondary-foreground: #f8e9e4;
+    --muted: #2c1b16;
+    --muted-foreground: #d8b7ab;
+    --accent: #36231d;
+    --accent-foreground: #f9dfb1;
+    --border: rgba(249, 223, 177, 0.16);
+    --input: rgba(249, 223, 177, 0.2);
+  }
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-geist-sans, system-ui);
+}
