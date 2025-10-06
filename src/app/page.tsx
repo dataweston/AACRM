@@ -1567,20 +1567,16 @@ export default function HomePage() {
                     {data.events.map((event) => {
                       const client = clientMap.get(event.clientId);
                       const assignedVendorDetails = (event.vendorIds ?? [])
-                        .map((vendorId) => {
+                        .flatMap((vendorId) => {
                           const vendor = vendorMap.get(vendorId);
-                          if (!vendor) {
-                            return null;
-                          }
-
-                          return {
-                            vendor,
-                            cost: event.vendorCosts?.[vendorId],
-                          };
-                        })
-                        .filter(
-                          (entry): entry is { vendor: Vendor; cost?: number } => Boolean(entry?.vendor)
-                        );
+                          if (!vendor) return [];
+                          return [
+                            {
+                              vendor,
+                              cost: event.vendorCosts?.[vendorId],
+                            },
+                          ];
+                        });
                       const vendorSummaryParts: string[] = [];
                       if (event.venue) {
                         const venueCost = event.venueCost;

@@ -33,9 +33,8 @@ export interface Event {
   coordinator: string;
   timeline?: string;
   vendorIds?: string[];
-  status: "contacted" | "bid" | "proposed" | "confirmed";
   vendorCosts?: Record<string, number>;
-  status: "contacted" | "bid" | "confirmed";
+  status: "contacted" | "bid" | "proposed" | "confirmed";
   estimate?: number;
   deposit?: number;
   depositPaid?: boolean;
