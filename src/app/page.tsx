@@ -875,34 +875,6 @@ export default function HomePage() {
                 </CardContent>
               </Card>
 
-              <Card className="bg-secondary/40">
-                <CardHeader>
-                  <CardTitle className="text-lg text-secondary-foreground">Weekly studio rhythm</CardTitle>
-                  <CardDescription className="text-secondary-foreground/80">
-                    Use these prompts during Monday standup to keep momentum.
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4 text-sm text-secondary-foreground/90">
-                  <div className="rounded-xl border border-secondary-foreground/20 bg-card/80 p-4">
-                    <h3 className="text-base font-semibold text-foreground">Lead review</h3>
-                    <p className="mt-2 text-sm text-muted-foreground">
-                      Confirm new inquiries, move them into booked or schedule discovery calls.
-                    </p>
-                  </div>
-                  <div className="rounded-xl border border-secondary-foreground/20 bg-card/80 p-4">
-                    <h3 className="text-base font-semibold text-foreground">Vendor sync</h3>
-                    <p className="mt-2 text-sm text-muted-foreground">
-                      Reconfirm holds, note travel requirements, and share styling references.
-                    </p>
-                  </div>
-                  <div className="rounded-xl border border-secondary-foreground/20 bg-card/80 p-4">
-                    <h3 className="text-base font-semibold text-foreground">Cash flow check</h3>
-                    <p className="mt-2 text-sm text-muted-foreground">
-                      Review overdue invoices and send gentle reminders before the weekend rush.
-                    </p>
-                  </div>
-                </CardContent>
-              </Card>
             </section>
 
             <section className="grid gap-6 lg:grid-cols-2">
