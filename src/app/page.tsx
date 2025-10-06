@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useMemo, useState } from "react";
 import type { DragEvent } from "react";
 import type { LucideIcon } from "lucide-react";
 import { Apple, BarChart3, Globe, Mail, Phone, Plus, Search, ShoppingBag, Sparkles, Users } from "lucide-react";
