@@ -41,12 +41,48 @@ const sanitizeVendorIds = (vendorIds: Event["vendorIds"], vendors: Vendor[]) => 
   return Array.from(new Set(deduped));
 };
 
+const sanitizeVendorCosts = (vendorCosts: Event["vendorCosts"], vendorIds: string[]) => {
+  if (!vendorCosts || typeof vendorCosts !== "object") {
+    return {} as Record<string, number>;
+  }
+
+  const validVendorIds = new Set(vendorIds);
+
+  return Object.entries(vendorCosts).reduce<Record<string, number>>((accumulator, [vendorId, value]) => {
+    if (!validVendorIds.has(vendorId)) {
+      return accumulator;
+    }
+
+    const parsedValue =
+      typeof value === "number"
+        ? value
+        : typeof value === "string"
+          ? Number(value)
+          : Number.NaN;
+
+    if (Number.isNaN(parsedValue) || parsedValue < 0 || !Number.isFinite(parsedValue)) {
+      return accumulator;
+    }
+
+    accumulator[vendorId] = parsedValue;
+    return accumulator;
+  }, {});
+};
+
 const normalizeEvent = (event: Omit<Event, "id">, vendors: Vendor[]): Omit<Event, "id"> => {
   const vendorIds = sanitizeVendorIds(event.vendorIds, vendors);
+  const vendorCosts = sanitizeVendorCosts(event.vendorCosts, vendorIds);
+  const hasVendorCosts = Object.keys(vendorCosts).length > 0;
+  const venueCost =
+    typeof event.venueCost === "number" && !Number.isNaN(event.venueCost) && event.venueCost >= 0
+      ? event.venueCost
+      : undefined;
 
   return {
     ...event,
     vendorIds: vendorIds.length > 0 ? vendorIds : undefined,
+    vendorCosts: hasVendorCosts ? vendorCosts : undefined,
+    venueCost,
   };
 };
 
@@ -103,10 +139,15 @@ export function useCrmData() {
         }
 
         const nextVendorIds = event.vendorIds.filter((id) => id !== vendorId);
+        const nextVendorCosts = event.vendorCosts ? { ...event.vendorCosts } : {};
+        if (nextVendorCosts[vendorId] !== undefined) {
+          delete nextVendorCosts[vendorId];
+        }
 
         return {
           ...event,
           vendorIds: nextVendorIds.length > 0 ? nextVendorIds : undefined,
+          vendorCosts: Object.keys(nextVendorCosts).length > 0 ? nextVendorCosts : undefined,
         };
       }),
     }));

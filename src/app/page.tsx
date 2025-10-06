@@ -491,7 +491,6 @@ export default function HomePage() {
   };
 
   const overview = useMemo(() => {
-    const vendorCostMap = new Map(data.vendors.map((vendor) => [vendor.id, vendor.cost ?? 0]));
     const confirmedEvents = data.events.filter((event) => event.status === "confirmed");
     const totalConfirmedEstimate = confirmedEvents.reduce(
       (sum, event) => sum + (event.estimate ?? 0),
@@ -503,11 +502,13 @@ export default function HomePage() {
     );
     const pipelineConfirmed = Math.max(totalConfirmedEstimate - totalConfirmedDeposits, 0);
     const confirmedVendorCost = confirmedEvents.reduce((sum, event) => {
-      const eventVendorCost = (event.vendorIds ?? []).reduce(
-        (vendorSum, vendorId) => vendorSum + (vendorCostMap.get(vendorId) ?? 0),
+      const vendorSpend = (event.vendorIds ?? []).reduce(
+        (vendorSum, vendorId) => vendorSum + (event.vendorCosts?.[vendorId] ?? 0),
         0
       );
-      return sum + eventVendorCost;
+      const venueSpend = event.venueCost ?? 0;
+
+      return sum + vendorSpend + venueSpend;
     }, 0);
     const confirmedAfterVendorCost = Math.max(pipelineConfirmed - confirmedVendorCost, 0);
     const pipelineProposed = data.events
@@ -930,12 +931,36 @@ export default function HomePage() {
                   )}
                   {overview.upcomingEvents.map((event) => {
                     const client = clientMap.get(event.clientId);
-                    const assignedVendors = (event.vendorIds ?? [])
-                      .map((vendorId) => vendorMap.get(vendorId) ?? null)
-                      .filter((vendor): vendor is Vendor => Boolean(vendor));
-                    const vendorSummary = assignedVendors
-                      .map((vendor) => `${vendor.name} (${formatCurrency(vendor.cost ?? 0)})`)
-                      .join(", ");
+                    const assignedVendorDetails = (event.vendorIds ?? [])
+                      .map((vendorId) => {
+                        const vendor = vendorMap.get(vendorId);
+                        if (!vendor) {
+                          return null;
+                        }
+
+                        return {
+                          vendor,
+                          cost: event.vendorCosts?.[vendorId],
+                        };
+                      })
+                      .filter(
+                        (entry): entry is { vendor: Vendor; cost?: number } => Boolean(entry?.vendor)
+                      );
+                    const vendorSummaryParts: string[] = [];
+                    if (event.venue) {
+                      const venueCost = event.venueCost;
+                      vendorSummaryParts.push(
+                        `${event.venue}${
+                          typeof venueCost === "number" ? ` (${formatCurrency(venueCost)})` : ""
+                        }`
+                      );
+                    }
+                    vendorSummaryParts.push(
+                      ...assignedVendorDetails.map(({ vendor, cost }) =>
+                        `${vendor.name}${typeof cost === "number" ? ` (${formatCurrency(cost)})` : ""}`
+                      )
+                    );
+                    const vendorSummary = vendorSummaryParts.join(", ");
                     return (
                       <button
                         key={event.id}
@@ -974,7 +999,7 @@ export default function HomePage() {
                             Deposit {event.depositPaid ? "received" : "due"} · {formatCurrency(event.deposit)}
                           </p>
                         )}
-                        {assignedVendors.length > 0 && (
+                        {vendorSummary && (
                           <p className="text-xs text-muted-foreground">
                             Vendors · {vendorSummary}
                           </p>
@@ -1152,12 +1177,36 @@ export default function HomePage() {
                     <CardContent className="space-y-3">
                     {data.events.map((event) => {
                       const client = clientMap.get(event.clientId);
-                      const assignedVendors = (event.vendorIds ?? [])
-                        .map((vendorId) => vendorMap.get(vendorId) ?? null)
-                        .filter((vendor): vendor is Vendor => Boolean(vendor));
-                      const vendorSummary = assignedVendors
-                        .map((vendor) => `${vendor.name} (${formatCurrency(vendor.cost ?? 0)})`)
-                        .join(", ");
+                      const assignedVendorDetails = (event.vendorIds ?? [])
+                        .map((vendorId) => {
+                          const vendor = vendorMap.get(vendorId);
+                          if (!vendor) {
+                            return null;
+                          }
+
+                          return {
+                            vendor,
+                            cost: event.vendorCosts?.[vendorId],
+                          };
+                        })
+                        .filter(
+                          (entry): entry is { vendor: Vendor; cost?: number } => Boolean(entry?.vendor)
+                        );
+                      const vendorSummaryParts: string[] = [];
+                      if (event.venue) {
+                        const venueCost = event.venueCost;
+                        vendorSummaryParts.push(
+                          `${event.venue}${
+                            typeof venueCost === "number" ? ` (${formatCurrency(venueCost)})` : ""
+                          }`
+                        );
+                      }
+                      vendorSummaryParts.push(
+                        ...assignedVendorDetails.map(({ vendor, cost }) =>
+                          `${vendor.name}${typeof cost === "number" ? ` (${formatCurrency(cost)})` : ""}`
+                        )
+                      );
+                      const vendorSummary = vendorSummaryParts.join(", ");
                       return (
                           <div key={event.id} className="space-y-2 rounded-xl border border-border/80 bg-muted/40 p-4">
                             <div className="flex flex-wrap items-center justify-between gap-3">
@@ -1204,7 +1253,7 @@ export default function HomePage() {
                                 Deposit {event.depositPaid ? "received" : "due"} · {formatCurrency(event.deposit)}
                               </p>
                             )}
-                            {assignedVendors.length > 0 && (
+                            {vendorSummary && (
                               <p className="text-xs text-muted-foreground">
                                 Vendors · {vendorSummary}
                               </p>
@@ -1305,7 +1354,7 @@ export default function HomePage() {
                             <div>
                               <h3 className="text-base font-semibold text-foreground">{vendor.name}</h3>
                               <p className="text-xs text-muted-foreground">
-                                {vendor.service} · {formatCurrency(vendor.cost ?? 0)}
+                                {vendor.service} · Costs tracked per event
                               </p>
                             </div>
                               <div className="flex flex-wrap items-center gap-2">
