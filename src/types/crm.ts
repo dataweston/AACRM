@@ -15,7 +15,6 @@ export interface Vendor {
   id: string;
   name: string;
   service: string;
-  cost?: number;
   email?: string;
   phone?: string;
   website?: string;
@@ -29,9 +28,11 @@ export interface Event {
   date: string;
   clientId: string;
   venue: string;
+  venueCost?: number;
   coordinator: string;
   timeline?: string;
   vendorIds?: string[];
+  vendorCosts?: Record<string, number>;
   status: "contacted" | "bid" | "confirmed";
   estimate?: number;
   deposit?: number;
