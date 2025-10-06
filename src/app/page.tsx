@@ -708,9 +708,11 @@ export default function HomePage() {
   return (
     <div className="min-h-screen bg-background">
       <header className="border-b border-border/50 bg-background/80 backdrop-blur">
-        <div className="mx-auto flex w-full max-w-6xl items-center justify-between gap-3 px-4 py-3 text-xs sm:text-sm">
-          <div className="text-muted-foreground">
-            Signed in as {session.user?.name || session.user?.email || "your team"}
+        <div className="mx-auto flex w-full max-w-6xl flex-wrap items-center justify-between gap-3 px-4 py-3 text-xs sm:text-sm">
+          <div className="flex items-center gap-3 text-muted-foreground">
+            <span className="font-semibold uppercase tracking-[0.35em] text-foreground">AACRM</span>
+            <span aria-hidden className="hidden h-4 border-l border-border/60 sm:inline" />
+            <span>Signed in as {session.user?.name || session.user?.email || "your team"}</span>
           </div>
           <div className="flex items-center gap-2">
             {isOffline && (
