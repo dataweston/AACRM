@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { format } from "date-fns";
+import { nanoid } from "nanoid";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -147,7 +148,7 @@ export function InvoiceForm({
     }
 
     const parsedItems = cleanedItems.map((item) => ({
-      id: item.id,
+      id: item.id ?? nanoid(),
       description: item.description,
       amount: Number(item.amount),
     }));
