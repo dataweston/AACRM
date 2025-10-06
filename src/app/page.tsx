@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ChangeEvent, ClipboardEvent, DragEvent, KeyboardEvent } from "react";
 import Link from "next/link";
-import { Apple, ExternalLink, Globe, Mail, Phone, Search, Sparkles } from "lucide-react";
+import { ExternalLink, Globe, Mail, Phone, Search, Sparkles } from "lucide-react";
 import { ClientForm } from "@/components/crm/client-form";
 import { EventForm } from "@/components/crm/event-form";
 import { InvoiceForm } from "@/components/crm/invoice-form";
@@ -163,10 +163,10 @@ export default function HomePage() {
     }
   }, []);
   const [isOffline, setIsOffline] = useState(false);
-  const { session, status, signInWithApple, signOut } = useAuth();
-  const [appleName, setAppleName] = useState("");
-  const [appleEmail, setAppleEmail] = useState("");
-  const [appleError, setAppleError] = useState<string | null>(null);
+  const { session, status, signInWithGoogle, signOut } = useAuth();
+  const [googleName, setGoogleName] = useState("");
+  const [googleEmail, setGoogleEmail] = useState("");
+  const [googleError, setGoogleError] = useState<string | null>(null);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -893,7 +893,7 @@ export default function HomePage() {
               Checking your sign-in
             </CardTitle>
             <CardDescription className="text-sm text-muted-foreground">
-              aacrm is verifying your saved Apple session.
+              aacrm is verifying your saved session.
             </CardDescription>
           </CardHeader>
         </Card>
@@ -907,48 +907,48 @@ export default function HomePage() {
         <Card className="w-full max-w-md border border-primary/30 bg-background/80 text-center shadow-lg">
           <CardHeader className="space-y-3">
             <CardTitle className="flex items-center justify-center gap-2 text-lg font-semibold text-foreground">
-              <Apple className="h-6 w-6 text-foreground" />
+              <ExternalLink className="h-6 w-6 text-foreground" />
               Sign in to your studio workspace
             </CardTitle>
             <CardDescription className="text-sm text-muted-foreground">
-              Use your Apple ID email to unlock event records, invoices, and vendor data stored locally on this
+              Use your Google account email to unlock event records, invoices, and vendor data stored locally on this
               device.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4 text-left">
             <div className="space-y-3">
               <Input
-                id="apple-name"
+                id="google-name"
                 placeholder="Name (optional)"
-                value={appleName}
-                onChange={(event) => setAppleName(event.target.value)}
+                value={googleName}
+                onChange={(event) => setGoogleName(event.target.value)}
               />
               <Input
-                id="apple-email"
+                id="google-email"
                 type="email"
-                placeholder="Apple ID email"
-                value={appleEmail}
-                onChange={(event) => setAppleEmail(event.target.value)}
+                placeholder="Google account email"
+                value={googleEmail}
+                onChange={(event) => setGoogleEmail(event.target.value)}
               />
-              {appleError && <p className="text-xs text-destructive">{appleError}</p>}
+              {googleError && <p className="text-xs text-destructive">{googleError}</p>}
             </div>
             <Button
               type="button"
               className="w-full justify-center bg-foreground text-background hover:bg-foreground/90"
               onClick={() => {
                 try {
-                  signInWithApple({ name: appleName, email: appleEmail });
-                  setAppleError(null);
-                  setAppleName("");
-                  setAppleEmail("");
+                  signInWithGoogle({ name: googleName, email: googleEmail });
+                  setGoogleError(null);
+                  setGoogleName("");
+                  setGoogleEmail("");
                 } catch (error) {
-                  setAppleError(
-                    error instanceof Error ? error.message : "Unable to sign in with the provided Apple ID."
+                  setGoogleError(
+                    error instanceof Error ? error.message : "Unable to sign in with the provided Google account."
                   );
                 }
               }}
             >
-              Continue with Apple
+              Continue with Google
             </Button>
             <p className="text-xs text-muted-foreground">
               Sessions are saved to this device so you can keep working even when you go offline.

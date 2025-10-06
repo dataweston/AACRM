@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { initFirebase, getFirestoreDb, onAuthChanged, getFirebaseAuth } from "@/lib/firebase";
+import { doc, onSnapshot, setDoc } from "firebase/firestore";
 import { nanoid } from "nanoid";
 
 import { sampleData } from "@/data/sample";
@@ -104,9 +106,27 @@ const ensureWixDetails = (wix?: InvoiceWixDetails): InvoiceWixDetails => ({
 export function useCrmData() {
   const [data, setData] = useState<CRMData>(sampleData);
   const [isHydrated, setIsHydrated] = useState(false);
+  const [userId, setUserId] = useState<string | null>(null);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
+
+    // initialize firebase if env present
+    if (process.env.NEXT_PUBLIC_FIREBASE_API_KEY) {
+      try {
+        initFirebase({
+          apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY ?? "",
+          authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN ?? "",
+          projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID ?? "",
+          storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET ?? "",
+          messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID ?? "",
+          appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID ?? "",
+        });
+      } catch (error) {
+        // ignore
+      }
+    }
+
     const stored = window.localStorage.getItem(STORAGE_KEY);
     if (stored) {
       try {
@@ -118,17 +138,57 @@ export function useCrmData() {
             wix: ensureWixDetails(invoice.wix),
           })),
         });
-      } catch (error) {
-        console.warn("Failed to parse stored CRM data", error);
+      } catch (_error) {
+        console.warn("Failed to parse stored CRM data", _error);
       }
     }
+
+    // subscribe to firebase auth changes to sync per-user data
+    const auth = getFirebaseAuth();
+    if (auth) {
+      const unsubscribeAuth = onAuthChanged((user) => {
+        const uid = user?.uid ?? null;
+        setUserId(uid);
+        if (uid) {
+          const db = getFirestoreDb();
+          if (!db) return;
+          const ref = doc(db, "crms", uid);
+          // subscribe to remote changes
+          return onSnapshot(ref, (snapshot) => {
+            const remote = snapshot.data() as CRMData | undefined;
+            if (remote) {
+              setData({
+                ...remote,
+                invoices: remote.invoices.map((invoice) => ({ ...invoice, wix: ensureWixDetails(invoice.wix) })),
+              });
+            }
+          });
+        }
+      });
+
+      return () => unsubscribeAuth();
+    }
+
     setIsHydrated(true);
   }, []);
 
   useEffect(() => {
-    if (!isHydrated || typeof window === "undefined") return;
+    if (typeof window === "undefined") return;
+    // always persist locally
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-  }, [data, isHydrated]);
+
+    // if we have a signed in user and firestore available, persist remotely
+    if (userId) {
+      const db = getFirestoreDb();
+      if (db) {
+        const ref = doc(db, "crms", userId);
+        void setDoc(ref, data, { merge: true }).catch((err) => {
+          // ignore write failures (e.g., offline) — firestore will handle retries
+          console.warn("Failed to write CRM data to Firestore", err);
+        });
+      }
+    }
+  }, [data, userId]);
 
   const addClient = (client: Omit<Client, "id">) =>
     setData((current) => ({
