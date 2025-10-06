@@ -65,7 +65,10 @@ export const sampleData: CRMData = {
       coordinator: "Amelia Sloan",
       timeline: "Ceremony 4pm, Dinner 6pm, Dancing 8pm",
       vendorIds: ["vendor-aurora-florals", "vendor-lyra-catering"],
-      status: "scheduled",
+      status: "confirmed",
+      estimate: 38000,
+      deposit: 8000,
+      depositPaid: true,
     },
     {
       id: "event-northcoast-gala",
@@ -76,7 +79,10 @@ export const sampleData: CRMData = {
       coordinator: "Miles Carter",
       timeline: "Keynote 7pm, Awards 8pm, Afterparty 10pm",
       vendorIds: ["vendor-lyra-catering"],
-      status: "in-progress",
+      status: "bid",
+      estimate: 42000,
+      deposit: 5000,
+      depositPaid: false,
     },
   ],
   invoices: [
