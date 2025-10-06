@@ -1,6 +1,7 @@
 "use client";
 
-import { type DragEvent, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
+import type { DragEvent } from "react";
 import type { LucideIcon } from "lucide-react";
 import { BarChart3, Globe, Mail, Phone, Plus, Search, ShoppingBag, Sparkles, Users } from "lucide-react";
 import { ClientForm } from "@/components/crm/client-form";
