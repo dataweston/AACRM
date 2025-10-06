@@ -2,8 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import type { DragEvent } from "react";
-import type { LucideIcon } from "lucide-react";
-import { Apple, BarChart3, Globe, Mail, Phone, Plus, Search, ShoppingBag, Sparkles, Users } from "lucide-react";
+import { Apple, Globe, Mail, Phone, Search, Sparkles } from "lucide-react";
 import { ClientForm } from "@/components/crm/client-form";
 import { EventForm } from "@/components/crm/event-form";
 import { InvoiceForm } from "@/components/crm/invoice-form";
@@ -58,25 +57,6 @@ const preferredContactLabels: Record<NonNullable<Vendor["preferredContact"]>, st
   phone: "Phone",
   text: "Text",
 };
-
-// Display-only marketing copy for the hero card; no backend integration is wired to these entries.
-const WIX_IMPORT_MODULES: { title: string; description: string; icon: LucideIcon }[] = [
-  {
-    title: "Sales & payouts",
-    description: "Import paid orders, open balances, and payout summaries from Wix Stores.",
-    icon: ShoppingBag,
-  },
-  {
-    title: "Lead capture",
-    description: "Sync Wix Forms inquiries and chat leads straight into your client pipeline.",
-    icon: Users,
-  },
-  {
-    title: "Site analytics",
-    description: "Mirror Wix Analytics dashboards so revenue and traffic trends stay visible.",
-    icon: BarChart3,
-  },
-];
 
 export default function HomePage() {
   const {
@@ -666,54 +646,9 @@ export default function HomePage() {
       </header>
       <section className="border-b border-border/60 bg-[radial-gradient(circle_at_top,_#f9dfb1,_transparent_45%),_#fff]">
         <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-4 py-10 sm:py-14">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-            <div className="max-w-2xl space-y-4">
-              <Badge className="w-fit bg-primary/10 text-xs font-semibold uppercase tracking-[0.3em] text-primary">
-                aacrm
-              </Badge>
-              <h1 className="text-3xl font-semibold leading-tight text-foreground sm:text-4xl">
-                The modern event relationship hub for boutique wedding studios
-              </h1>
-              <p className="text-base text-muted-foreground">
-                Keep clients, vendors, run-of-show logistics, and billing in one mobile-first workspace.
-                aacrm focuses on the essentials so you can move from inquiry to celebration without the
-                noise of enterprise platforms.
-              </p>
-              <div className="flex flex-wrap gap-2">
-                <Button
-                  type="button"
-                  className="bg-primary text-primary-foreground hover:bg-primary/90"
-                  onClick={() => setActiveTab("records")}
-                >
-                  <Plus className="mr-2 h-4 w-4" /> Add a record
-                </Button>
-              </div>
-            </div>
-            <Card className="w-full max-w-sm border border-primary/30 bg-primary/5">
-              <CardHeader>
-                <CardTitle className="text-base font-semibold text-primary">Wix import modules</CardTitle>
-                <CardDescription className="text-sm text-primary/80">
-                  Connect curated data syncs so aacrm mirrors the work happening in Wix.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4 text-sm text-muted-foreground">
-                <div className="space-y-3">
-                  {WIX_IMPORT_MODULES.map((module) => (
-                    <div key={module.title} className="flex items-start gap-3 text-foreground">
-                      <module.icon className="mt-0.5 h-4 w-4 text-primary" />
-                      <div className="space-y-1">
-                        <p className="font-medium leading-none">{module.title}</p>
-                        <p className="text-xs text-muted-foreground">{module.description}</p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-                <p className="text-xs text-muted-foreground/80">
-                  Sales, analytics, and lead funnels stay current without manual exports.
-                </p>
-              </CardContent>
-            </Card>
-          </div>
+          <p className="text-3xl font-semibold lowercase tracking-tight text-foreground sm:text-4xl">
+            welcome, alyssa.
+          </p>
         </div>
       </section>
 
