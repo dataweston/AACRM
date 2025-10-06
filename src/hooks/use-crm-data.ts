@@ -30,6 +30,26 @@ const withInvoiceItemId = (item: InvoiceItemInput): InvoiceItem => {
   return { ...item, id: nanoid() };
 };
 
+const sanitizeVendorIds = (vendorIds: Event["vendorIds"], vendors: Vendor[]) => {
+  if (!Array.isArray(vendorIds)) {
+    return [] as string[];
+  }
+
+  const validVendorIds = new Set(vendors.map((vendor) => vendor.id));
+  const deduped = vendorIds.filter((vendorId) => validVendorIds.has(vendorId));
+
+  return Array.from(new Set(deduped));
+};
+
+const normalizeEvent = (event: Omit<Event, "id">, vendors: Vendor[]): Omit<Event, "id"> => {
+  const vendorIds = sanitizeVendorIds(event.vendorIds, vendors);
+
+  return {
+    ...event,
+    vendorIds: vendorIds.length > 0 ? vendorIds : undefined,
+  };
+};
+
 export function useCrmData() {
   const [data, setData] = useState<CRMData>(sampleData);
   const [isHydrated, setIsHydrated] = useState(false);
@@ -77,19 +97,37 @@ export function useCrmData() {
     setData((current) => ({
       ...current,
       vendors: current.vendors.filter((entry) => entry.id !== vendorId),
+      events: current.events.map((event) => {
+        if (!event.vendorIds?.includes(vendorId)) {
+          return event;
+        }
+
+        const nextVendorIds = event.vendorIds.filter((id) => id !== vendorId);
+
+        return {
+          ...event,
+          vendorIds: nextVendorIds.length > 0 ? nextVendorIds : undefined,
+        };
+      }),
     }));
 
   const addEvent = (event: Omit<Event, "id">) =>
     setData((current) => ({
       ...current,
-      events: [withGeneratedId(event), ...current.events],
+      events: [withGeneratedId(normalizeEvent(event, current.vendors)), ...current.events],
     }));
 
   const updateEvent = (eventId: string, event: Omit<Event, "id">) =>
     setData((current) => ({
       ...current,
       events: current.events.map((entry) =>
-        entry.id === eventId ? { ...entry, ...event, id: eventId } : entry
+        entry.id === eventId
+          ? {
+              ...entry,
+              ...normalizeEvent(event, current.vendors),
+              id: eventId,
+            }
+          : entry
       ),
     }));
 
