@@ -788,8 +788,10 @@ export default function HomePage() {
     const searchValue = vendorSearch.trim().toLowerCase();
 
     return data.vendors.filter((vendor) => {
+      const vendorServiceValue = vendor.service ?? "";
+      const vendorService = vendorServiceValue.toLowerCase();
       const matchesService =
-        vendorServiceFilter === "all" || vendor.service.toLowerCase() === vendorServiceFilter.toLowerCase();
+        vendorServiceFilter === "all" || vendorService === vendorServiceFilter.toLowerCase();
 
       if (!matchesService) {
         return false;
@@ -1259,7 +1261,7 @@ export default function HomePage() {
                         };
                       })
                       .filter(
-                        (entry): entry is { vendor: Vendor; cost?: number } => Boolean(entry?.vendor)
+                        (entry): entry is { vendor: Vendor; cost: number | undefined } => entry !== null
                       );
                     const vendorSummaryParts: string[] = [];
                     if (event.venue) {
