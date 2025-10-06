@@ -1,8 +1,9 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ChangeEvent, ClipboardEvent, DragEvent, KeyboardEvent } from "react";
-import { Apple, Globe, Mail, Phone, Search, Sparkles } from "lucide-react";
+import { Apple, ExternalLink, Globe, Mail, Phone, Search, Sparkles } from "lucide-react";
 import { ClientForm } from "@/components/crm/client-form";
 import { EventForm } from "@/components/crm/event-form";
 import { InvoiceForm } from "@/components/crm/invoice-form";
@@ -21,7 +22,7 @@ import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useCrmData } from "@/hooks/use-crm-data";
 import { formatCurrency, formatDate } from "@/lib/format";
-import type { Client, Event as EventRecord, Invoice, Vendor } from "@/types/crm";
+import type { Client, Event as EventRecord, Invoice, InvoiceWixStatus, Vendor } from "@/types/crm";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/components/auth/auth-provider";
 
@@ -37,6 +38,29 @@ const invoiceStatusStyles: Record<Invoice["status"], string> = {
   sent: "bg-secondary text-secondary-foreground",
   paid: "bg-emerald-100 text-emerald-700",
   overdue: "bg-destructive/20 text-destructive",
+};
+
+const wixStatusCopy: Record<InvoiceWixStatus, { label: string; description: string; badge: string }> = {
+  not_created: {
+    label: "Not connected",
+    description: "Generate a Wix invoice to sync billing.",
+    badge: "bg-muted text-muted-foreground",
+  },
+  generated: {
+    label: "Draft in Wix",
+    description: "Invoice draft saved in Wix Billing.",
+    badge: "bg-sky-100 text-sky-700",
+  },
+  sent: {
+    label: "Sent via Wix",
+    description: "Invoice delivered through Wix with payment tracking.",
+    badge: "bg-secondary text-secondary-foreground",
+  },
+  paid: {
+    label: "Paid in Wix",
+    description: "Payment collected in Wix and synced here.",
+    badge: "bg-emerald-100 text-emerald-700",
+  },
 };
 
 const clientStatusLabels: Record<Client["status"], string> = {
@@ -81,6 +105,9 @@ export default function HomePage() {
     addInvoice,
     updateInvoice,
     deleteInvoice,
+    generateWixInvoice,
+    sendWixInvoice,
+    collectWixPayment,
   } = useCrmData();
   const [activeTab, setActiveTab] = useState("overview");
   const [vendorSearch, setVendorSearch] = useState("");
@@ -497,8 +524,19 @@ export default function HomePage() {
     setEditingInvoiceId((current) => (current === id ? null : current));
   };
 
+  const handleGenerateWixInvoice = (invoiceId: string) => {
+    generateWixInvoice(invoiceId);
+  };
+
+  const handleSendWixInvoice = (invoiceId: string) => {
+    sendWixInvoice(invoiceId);
+  };
+
+  const handleCollectWixPayment = (invoiceId: string) => {
+    collectWixPayment(invoiceId);
+  };
+
   const overview = useMemo(() => {
-    const vendorCostMap = new Map(data.vendors.map((vendor) => [vendor.id, vendor.cost ?? 0]));
     const confirmedEvents = data.events.filter((event) => event.status === "confirmed");
     const totalConfirmedEstimate = confirmedEvents.reduce(
       (sum, event) => sum + (event.estimate ?? 0),
@@ -510,11 +548,13 @@ export default function HomePage() {
     );
     const pipelineConfirmed = Math.max(totalConfirmedEstimate - totalConfirmedDeposits, 0);
     const confirmedVendorCost = confirmedEvents.reduce((sum, event) => {
-      const eventVendorCost = (event.vendorIds ?? []).reduce(
-        (vendorSum, vendorId) => vendorSum + (vendorCostMap.get(vendorId) ?? 0),
+      const vendorSpend = (event.vendorIds ?? []).reduce(
+        (vendorSum, vendorId) => vendorSum + (event.vendorCosts?.[vendorId] ?? 0),
         0
       );
-      return sum + eventVendorCost;
+      const venueSpend = event.venueCost ?? 0;
+
+      return sum + vendorSpend + venueSpend;
     }, 0);
     const confirmedAfterVendorCost = Math.max(pipelineConfirmed - confirmedVendorCost, 0);
     const pipelineProposed = data.events
@@ -715,9 +755,11 @@ export default function HomePage() {
   return (
     <div className="min-h-screen bg-background">
       <header className="border-b border-border/50 bg-background/80 backdrop-blur">
-        <div className="mx-auto flex w-full max-w-6xl items-center justify-between gap-3 px-4 py-3 text-xs sm:text-sm">
-          <div className="text-muted-foreground">
-            Signed in as {session.user?.name || session.user?.email || "your team"}
+        <div className="mx-auto flex w-full max-w-6xl flex-wrap items-center justify-between gap-3 px-4 py-3 text-xs sm:text-sm">
+          <div className="flex items-center gap-3 text-muted-foreground">
+            <span className="font-semibold uppercase tracking-[0.35em] text-foreground">AACRM</span>
+            <span aria-hidden className="hidden h-4 border-l border-border/60 sm:inline" />
+            <span>Signed in as {session.user?.name || session.user?.email || "your team"}</span>
           </div>
           <div className="flex items-center gap-2">
             {isOffline && (
@@ -937,12 +979,36 @@ export default function HomePage() {
                   )}
                   {overview.upcomingEvents.map((event) => {
                     const client = clientMap.get(event.clientId);
-                    const assignedVendors = (event.vendorIds ?? [])
-                      .map((vendorId) => vendorMap.get(vendorId) ?? null)
-                      .filter((vendor): vendor is Vendor => Boolean(vendor));
-                    const vendorSummary = assignedVendors
-                      .map((vendor) => `${vendor.name} (${formatCurrency(vendor.cost ?? 0)})`)
-                      .join(", ");
+                    const assignedVendorDetails = (event.vendorIds ?? [])
+                      .map((vendorId) => {
+                        const vendor = vendorMap.get(vendorId);
+                        if (!vendor) {
+                          return null;
+                        }
+
+                        return {
+                          vendor,
+                          cost: event.vendorCosts?.[vendorId],
+                        };
+                      })
+                      .filter(
+                        (entry): entry is { vendor: Vendor; cost?: number } => Boolean(entry?.vendor)
+                      );
+                    const vendorSummaryParts: string[] = [];
+                    if (event.venue) {
+                      const venueCost = event.venueCost;
+                      vendorSummaryParts.push(
+                        `${event.venue}${
+                          typeof venueCost === "number" ? ` (${formatCurrency(venueCost)})` : ""
+                        }`
+                      );
+                    }
+                    vendorSummaryParts.push(
+                      ...assignedVendorDetails.map(({ vendor, cost }) =>
+                        `${vendor.name}${typeof cost === "number" ? ` (${formatCurrency(cost)})` : ""}`
+                      )
+                    );
+                    const vendorSummary = vendorSummaryParts.join(", ");
                     return (
                       <button
                         key={event.id}
@@ -981,7 +1047,7 @@ export default function HomePage() {
                             Deposit {event.depositPaid ? "received" : "due"} · {formatCurrency(event.deposit)}
                           </p>
                         )}
-                        {assignedVendors.length > 0 && (
+                        {vendorSummary && (
                           <p className="text-xs text-muted-foreground">
                             Vendors · {vendorSummary}
                           </p>
@@ -1159,12 +1225,36 @@ export default function HomePage() {
                     <CardContent className="space-y-3">
                     {data.events.map((event) => {
                       const client = clientMap.get(event.clientId);
-                      const assignedVendors = (event.vendorIds ?? [])
-                        .map((vendorId) => vendorMap.get(vendorId) ?? null)
-                        .filter((vendor): vendor is Vendor => Boolean(vendor));
-                      const vendorSummary = assignedVendors
-                        .map((vendor) => `${vendor.name} (${formatCurrency(vendor.cost ?? 0)})`)
-                        .join(", ");
+                      const assignedVendorDetails = (event.vendorIds ?? [])
+                        .map((vendorId) => {
+                          const vendor = vendorMap.get(vendorId);
+                          if (!vendor) {
+                            return null;
+                          }
+
+                          return {
+                            vendor,
+                            cost: event.vendorCosts?.[vendorId],
+                          };
+                        })
+                        .filter(
+                          (entry): entry is { vendor: Vendor; cost?: number } => Boolean(entry?.vendor)
+                        );
+                      const vendorSummaryParts: string[] = [];
+                      if (event.venue) {
+                        const venueCost = event.venueCost;
+                        vendorSummaryParts.push(
+                          `${event.venue}${
+                            typeof venueCost === "number" ? ` (${formatCurrency(venueCost)})` : ""
+                          }`
+                        );
+                      }
+                      vendorSummaryParts.push(
+                        ...assignedVendorDetails.map(({ vendor, cost }) =>
+                          `${vendor.name}${typeof cost === "number" ? ` (${formatCurrency(cost)})` : ""}`
+                        )
+                      );
+                      const vendorSummary = vendorSummaryParts.join(", ");
                       return (
                           <div key={event.id} className="space-y-2 rounded-xl border border-border/80 bg-muted/40 p-4">
                             <div className="flex flex-wrap items-center justify-between gap-3">
@@ -1211,7 +1301,7 @@ export default function HomePage() {
                                 Deposit {event.depositPaid ? "received" : "due"} · {formatCurrency(event.deposit)}
                               </p>
                             )}
-                            {assignedVendors.length > 0 && (
+                            {vendorSummary && (
                               <p className="text-xs text-muted-foreground">
                                 Vendors · {vendorSummary}
                               </p>
@@ -1312,7 +1402,7 @@ export default function HomePage() {
                             <div>
                               <h3 className="text-base font-semibold text-foreground">{vendor.name}</h3>
                               <p className="text-xs text-muted-foreground">
-                                {vendor.service} · {formatCurrency(vendor.cost ?? 0)}
+                                {vendor.service} · Costs tracked per event
                               </p>
                             </div>
                               <div className="flex flex-wrap items-center gap-2">
@@ -1429,6 +1519,11 @@ export default function HomePage() {
                 <CardContent className="space-y-3">
                   {data.invoices.map((invoice) => {
                     const client = clientMap.get(invoice.clientId);
+                    const wixStatus = (invoice.wix?.status ?? "not_created") as InvoiceWixStatus;
+                    const wixMeta = wixStatusCopy[wixStatus];
+                    const wixLastUpdated = invoice.wix?.lastActionAt
+                      ? formatDate(invoice.wix.lastActionAt)
+                      : null;
                     return (
                       <div key={invoice.id} className="space-y-3 rounded-xl border border-border/80 bg-muted/40 p-4">
                         <div className="flex flex-wrap items-center justify-between gap-3">
@@ -1478,6 +1573,67 @@ export default function HomePage() {
                             </li>
                           ))}
                         </ul>
+                        <div className="rounded-lg border border-dashed border-primary/40 bg-primary/5 p-3">
+                          <div className="flex flex-wrap items-start justify-between gap-3">
+                            <div className="space-y-1">
+                              <p className="text-sm font-semibold text-foreground">Wix billing</p>
+                              <p className="text-xs text-muted-foreground">
+                                {wixMeta.description}
+                                {wixLastUpdated && (
+                                  <span className="block">Last updated {wixLastUpdated}</span>
+                                )}
+                              </p>
+                              {invoice.wix?.invoiceId && (
+                                <p className="text-xs text-muted-foreground">
+                                  Wix invoice ID: {invoice.wix.invoiceId}
+                                </p>
+                              )}
+                            </div>
+                            <Badge className={`${wixMeta.badge} whitespace-nowrap`}>{wixMeta.label}</Badge>
+                          </div>
+                          <div className="mt-3 flex flex-wrap items-center gap-2">
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="secondary"
+                              onClick={() => handleGenerateWixInvoice(invoice.id)}
+                            >
+                              {invoice.wix?.invoiceId ? "Regenerate Wix invoice" : "Generate Wix invoice"}
+                            </Button>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              onClick={() => handleSendWixInvoice(invoice.id)}
+                              disabled={wixStatus === "not_created"}
+                            >
+                              Send via Wix
+                            </Button>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="ghost"
+                              className="text-primary hover:text-primary"
+                              onClick={() => handleCollectWixPayment(invoice.id)}
+                              disabled={wixStatus !== "sent"}
+                            >
+                              Collect payment in Wix
+                            </Button>
+                            {invoice.wix?.paymentLink && (
+                              <Button asChild size="sm" variant="link" className="pl-0 text-primary">
+                                <Link
+                                  href={invoice.wix.paymentLink}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="inline-flex items-center gap-1"
+                                >
+                                  <ExternalLink className="h-4 w-4" />
+                                  View in Wix
+                                </Link>
+                              </Button>
+                            )}
+                          </div>
+                        </div>
                       </div>
                     );
                   })}

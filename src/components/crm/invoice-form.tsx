@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import type { Client, Invoice } from "@/types/crm";
+import type { Client, Invoice, InvoiceWixDetails } from "@/types/crm";
 
 type InvoiceFormMode = "create" | "edit";
 
@@ -30,6 +30,7 @@ interface InvoiceItemFormState {
 }
 
 const defaultItem: InvoiceItemFormState = { description: "", amount: "" };
+const defaultWixDetails: InvoiceWixDetails = { status: "not_created" };
 
 const createDefaultForm = () => ({
   clientId: "",
@@ -162,6 +163,10 @@ export function InvoiceForm({
       return;
     }
 
+    const wixDetails: InvoiceWixDetails = initialInvoice?.wix
+      ? { ...initialInvoice.wix }
+      : { ...defaultWixDetails };
+
     const payload: Omit<Invoice, "id"> = {
       clientId: form.clientId,
       issueDate: form.issueDate,
@@ -170,6 +175,7 @@ export function InvoiceForm({
       total,
       items: parsedItems,
       notes: form.notes.trim() ? form.notes.trim() : undefined,
+      wix: wixDetails,
     };
 
     onSubmit(payload, mode === "edit" ? initialInvoice?.id : undefined);
