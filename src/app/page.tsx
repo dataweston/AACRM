@@ -1,20 +1,8 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import {
-  ArrowUpRight,
-  CalendarDays,
-  Download,
-  Globe,
-  Link2,
-  Mail,
-  Phone,
-  Plus,
-  Search,
-  Sparkles,
-} from "lucide-react";
-import { format } from "date-fns";
-
+import type { LucideIcon } from "lucide-react";
+import { BarChart3, Globe, Mail, Phone, Plus, Search, ShoppingBag, Sparkles, Users } from "lucide-react";
 import { ClientForm } from "@/components/crm/client-form";
 import { EventForm } from "@/components/crm/event-form";
 import { InvoiceForm } from "@/components/crm/invoice-form";
@@ -62,6 +50,24 @@ const preferredContactLabels: Record<NonNullable<Vendor["preferredContact"]>, st
   phone: "Phone",
   text: "Text",
 };
+
+const WIX_IMPORT_MODULES: { title: string; description: string; icon: LucideIcon }[] = [
+  {
+    title: "Sales & payouts",
+    description: "Import paid orders, open balances, and payout summaries from Wix Stores.",
+    icon: ShoppingBag,
+  },
+  {
+    title: "Lead capture",
+    description: "Sync Wix Forms inquiries and chat leads straight into your client pipeline.",
+    icon: Users,
+  },
+  {
+    title: "Site analytics",
+    description: "Mirror Wix Analytics dashboards so revenue and traffic trends stay visible.",
+    icon: BarChart3,
+  },
+];
 
 export default function HomePage() {
   const {
@@ -174,93 +180,6 @@ export default function HomePage() {
     }
     deleteInvoice(id);
     setEditingInvoiceId((current) => (current === id ? null : current));
-  };
-
-  const handleExport = () => {
-    if (typeof window === "undefined") return;
-
-    const sanitize = (value: string | number | undefined | null) => {
-      if (value === undefined || value === null) return "";
-      const stringValue = String(value).replace(/"/g, '""');
-      return /[",\n]/.test(stringValue) ? `"${stringValue}"` : stringValue;
-    };
-
-    const lines: string[] = [];
-    const pushRow = (cells: (string | number | undefined | null)[]) => {
-      lines.push(cells.map(sanitize).join(","));
-    };
-
-    pushRow(["Clients"]);
-    pushRow(["Name", "Email", "Phone", "Status", "Event Date", "Budget", "Notes"]);
-    data.clients.forEach((client) =>
-      pushRow([
-        client.name,
-        client.email,
-        client.phone,
-        clientStatusLabels[client.status],
-        client.eventDate ? formatDate(client.eventDate) : "",
-        typeof client.budget === "number" ? client.budget : "",
-        client.notes,
-      ])
-    );
-    lines.push("");
-
-    pushRow(["Vendors"]);
-    pushRow(["Name", "Service", "Email", "Phone", "Website", "Preferred Contact", "Notes"]);
-    data.vendors.forEach((vendor) =>
-      pushRow([
-        vendor.name,
-        vendor.service,
-        vendor.email,
-        vendor.phone,
-        vendor.website,
-        vendor.preferredContact,
-        vendor.notes,
-      ])
-    );
-    lines.push("");
-
-    pushRow(["Events"]);
-    pushRow(["Name", "Date", "Client", "Venue", "Coordinator", "Status", "Timeline"]);
-    data.events.forEach((event) => {
-      const client = data.clients.find((entry) => entry.id === event.clientId);
-      pushRow([
-        event.name,
-        formatDate(event.date),
-        client?.name,
-        event.venue,
-        event.coordinator,
-        event.status,
-        event.timeline,
-      ]);
-    });
-    lines.push("");
-
-    pushRow(["Invoices"]);
-    pushRow(["Invoice #", "Client", "Issue Date", "Due Date", "Status", "Total", "Notes"]);
-    data.invoices.forEach((invoice) => {
-      const client = data.clients.find((entry) => entry.id === invoice.clientId);
-      pushRow([
-        invoice.id,
-        client?.name,
-        formatDate(invoice.issueDate),
-        formatDate(invoice.dueDate),
-        invoice.status,
-        invoice.total,
-        invoice.notes,
-      ]);
-    });
-
-    const csvContent = lines.join("\n");
-    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
-    const url = window.URL.createObjectURL(blob);
-    const anchor = document.createElement("a");
-    anchor.href = url;
-    anchor.download = `aacrm-roster-${format(new Date(), "yyyyMMdd-HHmm")}.csv`;
-    document.body.appendChild(anchor);
-    anchor.click();
-    document.body.removeChild(anchor);
-    window.URL.revokeObjectURL(url);
   };
 
   const overview = useMemo(() => {
@@ -396,32 +315,29 @@ export default function HomePage() {
                 >
                   <Plus className="mr-2 h-4 w-4" /> Add a record
                 </Button>
-                <Button type="button" variant="outline" onClick={handleExport}>
-                  <Download className="mr-2 h-4 w-4" /> Export CSV snapshot
-                </Button>
               </div>
             </div>
             <Card className="w-full max-w-sm border border-primary/30 bg-primary/5">
               <CardHeader>
-                <CardTitle className="text-base font-semibold text-primary">
-                  Wix-ready embed
-                </CardTitle>
+                <CardTitle className="text-base font-semibold text-primary">Wix import modules</CardTitle>
                 <CardDescription className="text-sm text-primary/80">
-                  Drop the deployed URL into a Wix <em>Custom Embed</em> block and gate the page with member
-                  access for your internal team.
+                  Connect curated data syncs so aacrm mirrors the work happening in Wix.
                 </CardDescription>
               </CardHeader>
-              <CardContent className="space-y-3 text-sm text-muted-foreground">
-                <p className="flex items-center gap-2 text-foreground">
-                  <Link2 className="h-4 w-4 text-primary" /> Works in responsive Wix layouts
-                </p>
-                <p className="flex items-center gap-2">
-                  <CalendarDays className="h-4 w-4 text-primary" /> Keep your event pipeline visible on the
-                  go
-                </p>
-                <p className="flex items-center gap-2">
-                  <ArrowUpRight className="h-4 w-4 text-primary" /> Launch in a modal or dedicated studio
-                  page
+              <CardContent className="space-y-4 text-sm text-muted-foreground">
+                <div className="space-y-3">
+                  {WIX_IMPORT_MODULES.map((module) => (
+                    <div key={module.title} className="flex items-start gap-3 text-foreground">
+                      <module.icon className="mt-0.5 h-4 w-4 text-primary" />
+                      <div className="space-y-1">
+                        <p className="font-medium leading-none">{module.title}</p>
+                        <p className="text-xs text-muted-foreground">{module.description}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <p className="text-xs text-muted-foreground/80">
+                  Sales, analytics, and lead funnels stay current without manual exports.
                 </p>
               </CardContent>
             </Card>
@@ -435,7 +351,6 @@ export default function HomePage() {
             <TabsTrigger value="overview">Overview</TabsTrigger>
             <TabsTrigger value="records">Records</TabsTrigger>
             <TabsTrigger value="billing">Billing</TabsTrigger>
-            <TabsTrigger value="embed">Embed guide</TabsTrigger>
           </TabsList>
 
           <TabsContent value="overview" className="space-y-6">
@@ -1083,74 +998,6 @@ export default function HomePage() {
             </section>
           </TabsContent>
 
-          <TabsContent value="embed" className="space-y-6" id="integrations">
-            <section className="grid gap-6 xl:grid-cols-[1fr_1.1fr]">
-              <Card className="bg-card/90">
-                <CardHeader>
-                  <CardTitle>Wix embed launch checklist</CardTitle>
-                  <CardDescription>
-                    Publish aacrm and surface it securely to your internal coordination team.
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4 text-sm text-muted-foreground">
-                  <ol className="list-decimal space-y-3 pl-5">
-                    <li>
-                      Deploy this Next.js app to Vercel (recommended) or a similar host and copy the
-                      production URL (e.g. <code>https://studio.yourdomain.com</code>).
-                    </li>
-                    <li>
-                      In Wix, add <strong>Embed → Custom Embed → Embed a Site</strong> to your internal
-                      dashboard and paste the URL.
-                    </li>
-                    <li>
-                      Set height to <code>100%</code>, enable <em>auto resize</em>, and allow scrolling so the CRM
-                      remains mobile responsive inside Wix.
-                    </li>
-                    <li>
-                      Use Wix Member Areas or password protection to limit access to your planning team.
-                    </li>
-                  </ol>
-                  <Separator className="my-4 bg-border" />
-                  <p>
-                    Need offline backups? Export a CSV snapshot anytime and store it in your shared drive.
-                  </p>
-                  <Button type="button" variant="outline" className="w-full justify-center gap-2" onClick={handleExport}>
-                    <Download className="h-4 w-4" /> Export roster CSV
-                  </Button>
-                </CardContent>
-              </Card>
-
-              <Card className="bg-secondary/50">
-                <CardHeader>
-                  <CardTitle className="text-lg text-secondary-foreground">Automation starters</CardTitle>
-                  <CardDescription className="text-secondary-foreground/80">
-                    Extend aacrm with nocode flows as you scale operations.
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4 text-sm text-secondary-foreground/90">
-                  <div className="rounded-xl border border-secondary-foreground/20 bg-card/70 p-4">
-                    <h3 className="text-base font-semibold text-foreground">Zapier hand-offs</h3>
-                    <p className="mt-2 text-sm text-muted-foreground">
-                      Send new clients to ClickUp, Google Sheets, or HoneyBook to keep legacy workflows in
-                      sync.
-                    </p>
-                  </div>
-                  <div className="rounded-xl border border-secondary-foreground/20 bg-card/70 p-4">
-                    <h3 className="text-base font-semibold text-foreground">Slack nudges</h3>
-                    <p className="mt-2 text-sm text-muted-foreground">
-                      Trigger reminders when invoices go overdue or when a new vendor is added to the roster.
-                    </p>
-                  </div>
-                  <div className="rounded-xl border border-secondary-foreground/20 bg-card/70 p-4">
-                    <h3 className="text-base font-semibold text-foreground">Airtable backups</h3>
-                    <p className="mt-2 text-sm text-muted-foreground">
-                      Use the CSV export as a nightly import into Airtable for reporting and archiving.
-                    </p>
-                  </div>
-                </CardContent>
-              </Card>
-            </section>
-          </TabsContent>
         </Tabs>
       </main>
     </div>
