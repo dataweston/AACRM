@@ -22,6 +22,8 @@ interface EventFormProps {
   vendors: Vendor[];
 }
 
+type EventStatus = EventType["status"];
+
 type FormState = {
   name: string;
   date: string;
@@ -29,9 +31,18 @@ type FormState = {
   venue: string;
   coordinator: string;
   timeline: string;
-  status: "scheduled" | "in-progress" | "wrap-up";
+  status: EventStatus;
   vendorIds: string[];
+  estimate: string;
+  deposit: string;
+  depositPaid: boolean;
 };
+
+const EVENT_STATUS_OPTIONS: { value: EventStatus; label: string }[] = [
+  { value: "contacted", label: "Contacted" },
+  { value: "bid", label: "Bid sent" },
+  { value: "confirmed", label: "Confirmed" },
+];
 
 const createDefaultForm = (): FormState => ({
   name: "",
@@ -40,8 +51,11 @@ const createDefaultForm = (): FormState => ({
   venue: "",
   coordinator: "",
   timeline: "",
-  status: "scheduled" as "scheduled" | "in-progress" | "wrap-up",
+  status: "contacted",
   vendorIds: [],
+  estimate: "",
+  deposit: "",
+  depositPaid: false,
 });
 
 export function EventForm({
@@ -67,6 +81,9 @@ export function EventForm({
         timeline: initialEvent.timeline ?? "",
         status: initialEvent.status,
         vendorIds: initialEvent.vendorIds ? [...initialEvent.vendorIds] : [],
+        estimate: typeof initialEvent.estimate === "number" ? String(initialEvent.estimate) : "",
+        deposit: typeof initialEvent.deposit === "number" ? String(initialEvent.deposit) : "",
+        depositPaid: Boolean(initialEvent.depositPaid),
       });
       setErrors({});
     } else if (mode === "create") {
@@ -116,6 +133,24 @@ export function EventForm({
       nextErrors.clientId = "Client no longer exists.";
     }
 
+    if (form.estimate.trim()) {
+      const estimateValue = Number(form.estimate);
+      if (Number.isNaN(estimateValue) || estimateValue < 0) {
+        nextErrors.estimate = "Enter a valid estimate.";
+      }
+    }
+
+    if (form.deposit.trim()) {
+      const depositValue = Number(form.deposit);
+      if (Number.isNaN(depositValue) || depositValue < 0) {
+        nextErrors.deposit = "Enter a valid deposit.";
+      }
+    }
+
+    if (!form.deposit.trim() && form.depositPaid) {
+      nextErrors.depositPaid = "Add a deposit amount before marking it paid.";
+    }
+
     return nextErrors;
   };
 
@@ -129,6 +164,10 @@ export function EventForm({
 
     const vendorIds = form.vendorIds.filter((vendorId) => knownVendorIds.has(vendorId));
 
+    const estimate = form.estimate.trim() ? Number(form.estimate) : undefined;
+    const deposit = form.deposit.trim() ? Number(form.deposit) : undefined;
+    const depositPaid = deposit !== undefined ? form.depositPaid : false;
+
     const payload: Omit<EventType, "id"> = {
       name: form.name.trim(),
       date: form.date,
@@ -138,6 +177,9 @@ export function EventForm({
       timeline: form.timeline.trim() ? form.timeline.trim() : undefined,
       status: form.status,
       vendorIds: vendorIds.length > 0 ? vendorIds : undefined,
+      estimate,
+      deposit,
+      depositPaid,
     };
 
     onSubmit(payload, mode === "edit" ? initialEvent?.id : undefined);
@@ -212,13 +254,15 @@ export function EventForm({
                 onChange={(event) =>
                   setForm((prev) => ({
                     ...prev,
-                    status: event.target.value as "scheduled" | "in-progress" | "wrap-up",
+                    status: event.target.value as EventStatus,
                   }))
                 }
               >
-                <option value="scheduled">Scheduled</option>
-                <option value="in-progress">In progress</option>
-                <option value="wrap-up">Wrap up</option>
+                {EVENT_STATUS_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
               </Select>
             </div>
           </div>
@@ -261,6 +305,64 @@ export function EventForm({
               />
             </div>
           </div>
+          <div className="grid gap-2 sm:grid-cols-2 sm:gap-4">
+            <div className="grid gap-2">
+              <Label htmlFor="event-estimate">Estimate</Label>
+              <Input
+                id="event-estimate"
+                type="number"
+                min="0"
+                step="0.01"
+                placeholder="Projected total"
+                value={form.estimate}
+                onChange={(event) =>
+                  setForm((prev) => ({
+                    ...prev,
+                    estimate: event.target.value,
+                  }))
+                }
+                aria-invalid={Boolean(errors.estimate)}
+              />
+              {errors.estimate && <p className="text-xs text-destructive">{errors.estimate}</p>}
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="event-deposit">Deposit</Label>
+              <Input
+                id="event-deposit"
+                type="number"
+                min="0"
+                step="0.01"
+                placeholder="Deposit amount"
+                value={form.deposit}
+                onChange={(event) =>
+                  setForm((prev) => ({
+                    ...prev,
+                    deposit: event.target.value,
+                    depositPaid: prev.depositPaid && event.target.value.trim() ? prev.depositPaid : false,
+                  }))
+                }
+                aria-invalid={Boolean(errors.deposit)}
+              />
+              {errors.deposit && <p className="text-xs text-destructive">{errors.deposit}</p>}
+              <label className="flex items-center gap-2 text-xs text-muted-foreground">
+                <input
+                  type="checkbox"
+                  checked={form.depositPaid}
+                  onChange={(event) =>
+                    setForm((prev) => ({
+                      ...prev,
+                      depositPaid: event.target.checked,
+                    }))
+                  }
+                  disabled={!form.deposit.trim()}
+                  className="h-4 w-4 rounded border border-input text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                />
+                <span>Deposit received</span>
+              </label>
+              {errors.depositPaid && <p className="text-xs text-destructive">{errors.depositPaid}</p>}
+            </div>
+          </div>
+
           <div className="grid gap-2">
             <Label>Vendors</Label>
             <div className="space-y-2 rounded-lg border border-border/60 bg-background/50 p-3">

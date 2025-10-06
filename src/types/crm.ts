@@ -31,7 +31,10 @@ export interface Event {
   coordinator: string;
   timeline?: string;
   vendorIds?: string[];
-  status: "scheduled" | "in-progress" | "wrap-up";
+  status: "contacted" | "bid" | "confirmed";
+  estimate?: number;
+  deposit?: number;
+  depositPaid?: boolean;
 }
 
 export interface InvoiceItem {

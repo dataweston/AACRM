@@ -47,6 +47,12 @@ const clientStatusLabels: Record<Client["status"], string> = {
   completed: "Completed",
 };
 
+const eventStatusLabels: Record<EventRecord["status"], string> = {
+  contacted: "Contacted",
+  bid: "Bid sent",
+  confirmed: "Confirmed",
+};
+
 const preferredContactLabels: Record<NonNullable<Vendor["preferredContact"]>, string> = {
   email: "Email",
   phone: "Phone",
@@ -447,10 +453,6 @@ export default function HomePage() {
       .filter((invoice) => invoice.status === "sent" || invoice.status === "overdue")
       .reduce((sum, invoice) => sum + invoice.total, 0);
 
-    const nextEvent = [...data.events]
-      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
-      .find((event) => new Date(event.date) >= new Date());
-
     const pipeline = CLIENT_PIPELINE.map((column) => ({
       ...column,
       items: data.clients.filter((client) => client.status === column.id),
@@ -459,6 +461,20 @@ export default function HomePage() {
     const upcomingEvents = [...data.events]
       .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
       .slice(0, 4);
+
+    const heldDeposits = data.events.reduce(
+      (accumulator, event) => {
+        if (event.depositPaid && typeof event.deposit === "number") {
+          return {
+            total: accumulator.total + event.deposit,
+            count: accumulator.count + 1,
+          };
+        }
+
+        return accumulator;
+      },
+      { total: 0, count: 0 }
+    );
 
     const recentInvoices = [...data.invoices]
       .sort((a, b) => new Date(b.issueDate).getTime() - new Date(a.issueDate).getTime())
@@ -469,9 +485,10 @@ export default function HomePage() {
       activeClients: activeClients.length,
       bookedRevenue,
       outstandingInvoices,
-      nextEvent,
       pipeline,
       upcomingEvents,
+      heldDeposits: heldDeposits.total,
+      heldDepositCount: heldDeposits.count,
       recentInvoices,
     };
   }, [data]);
@@ -746,16 +763,18 @@ export default function HomePage() {
               <Card className="bg-primary text-primary-foreground">
                 <CardHeader className="pb-2">
                   <CardDescription className="text-primary-foreground/80">
-                    Next milestone
+                    Currently held deposits
                   </CardDescription>
-                  <CardTitle className="text-2xl font-semibold">
-                    {overview.nextEvent ? overview.nextEvent.name : "No upcoming events"}
+                  <CardTitle className="text-3xl font-semibold">
+                    {formatCurrency(overview.heldDeposits)}
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="text-xs text-primary-foreground/80">
-                  {overview.nextEvent
-                    ? `${formatDate(overview.nextEvent.date)} · ${overview.nextEvent.venue}`
-                    : "Add your next celebration to stay ahead."}
+                  {overview.heldDepositCount === 0
+                    ? "Mark deposits as received in event records to track retainers."
+                    : `${overview.heldDepositCount} deposit${
+                        overview.heldDepositCount === 1 ? "" : "s"
+                      } received across active events.`}
                 </CardContent>
               </Card>
             </section>
@@ -917,7 +936,7 @@ export default function HomePage() {
                             </p>
                           </div>
                           <Badge variant="neutral" className="capitalize">
-                            {event.status.replace("-", " ")}
+                            {eventStatusLabels[event.status]}
                           </Badge>
                         </div>
                         <p className="text-xs text-muted-foreground">
@@ -925,6 +944,16 @@ export default function HomePage() {
                         </p>
                         {client && (
                           <p className="text-xs text-muted-foreground">Client · {client.name}</p>
+                        )}
+                        {typeof event.estimate === "number" && (
+                          <p className="text-xs text-muted-foreground">
+                            Estimate · {formatCurrency(event.estimate)}
+                          </p>
+                        )}
+                        {typeof event.deposit === "number" && (
+                          <p className="text-xs text-muted-foreground">
+                            Deposit {event.depositPaid ? "received" : "due"} · {formatCurrency(event.deposit)}
+                          </p>
                         )}
                         {assignedVendors.length > 0 && (
                           <p className="text-xs text-muted-foreground">
@@ -1118,7 +1147,7 @@ export default function HomePage() {
                               </div>
                               <div className="flex flex-wrap items-center gap-2">
                                 <Badge variant="neutral" className="capitalize">
-                                  {event.status.replace("-", " ")}
+                                  {eventStatusLabels[event.status]}
                                 </Badge>
                                 <Button
                                   type="button"
@@ -1143,6 +1172,16 @@ export default function HomePage() {
                               {client && <span>Client · {client.name}</span>}
                               {event.coordinator && <span>Lead · {event.coordinator}</span>}
                             </div>
+                            {typeof event.estimate === "number" && (
+                              <p className="text-xs text-muted-foreground">
+                                Estimate · {formatCurrency(event.estimate)}
+                              </p>
+                            )}
+                            {typeof event.deposit === "number" && (
+                              <p className="text-xs text-muted-foreground">
+                                Deposit {event.depositPaid ? "received" : "due"} · {formatCurrency(event.deposit)}
+                              </p>
+                            )}
                             {assignedVendors.length > 0 && (
                               <p className="text-xs text-muted-foreground">
                                 Vendors · {assignedVendors.map((vendor) => vendor.name).join(", ")}
