@@ -788,8 +788,10 @@ export default function HomePage() {
     const searchValue = vendorSearch.trim().toLowerCase();
 
     return data.vendors.filter((vendor) => {
+      const vendorServiceValue = vendor.service ?? "";
+      const vendorService = vendorServiceValue.toLowerCase();
       const matchesService =
-        vendorServiceFilter === "all" || vendor.service.toLowerCase() === vendorServiceFilter.toLowerCase();
+        vendorServiceFilter === "all" || vendorService === vendorServiceFilter.toLowerCase();
 
       if (!matchesService) {
         return false;
