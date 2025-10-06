@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ChangeEvent, ClipboardEvent, DragEvent, KeyboardEvent } from "react";
+import Link from "next/link";
 import { Apple, ExternalLink, Globe, Mail, Phone, Search, Sparkles } from "lucide-react";
 import { ClientForm } from "@/components/crm/client-form";
 import { EventForm } from "@/components/crm/event-form";
@@ -153,6 +154,9 @@ export default function HomePage() {
   const [editingEventId, setEditingEventId] = useState<string | null>(null);
   const [editingInvoiceId, setEditingInvoiceId] = useState<string | null>(null);
   const [recordsTab, setRecordsTab] = useState<"clients" | "events" | "vendors">("clients");
+  const [selectedClientIds, setSelectedClientIds] = useState<string[]>([]);
+  const [selectedEventIds, setSelectedEventIds] = useState<string[]>([]);
+  const [selectedVendorIds, setSelectedVendorIds] = useState<string[]>([]);
   const handleRecordsTabChange = useCallback((value: string) => {
     if (value === "clients" || value === "events" || value === "vendors") {
       setRecordsTab(value);
@@ -527,24 +531,12 @@ export default function HomePage() {
     setSelectedClientIds([]);
   };
 
-  const toggleEventSelection = (id: string) => {
-    setSelectedEventIds((current) =>
-      current.includes(id) ? current.filter((eventId) => eventId !== id) : [...current, id]
-    );
-  };
-
   const selectAllEvents = () => {
     setSelectedEventIds(data.events.map((event) => event.id));
   };
 
   const clearEventSelection = () => {
     setSelectedEventIds([]);
-  };
-
-  const toggleVendorSelection = (id: string) => {
-    setSelectedVendorIds((current) =>
-      current.includes(id) ? current.filter((vendorId) => vendorId !== id) : [...current, id]
-    );
   };
 
   const selectAllVendors = () => {
@@ -691,6 +683,18 @@ export default function HomePage() {
     }
     deleteInvoice(id);
     setEditingInvoiceId((current) => (current === id ? null : current));
+  };
+
+  const handleGenerateWixInvoice = (invoiceId: string) => {
+    generateWixInvoice(invoiceId);
+  };
+
+  const handleSendWixInvoice = (invoiceId: string) => {
+    sendWixInvoice(invoiceId);
+  };
+
+  const handleCollectWixPayment = (invoiceId: string) => {
+    collectWixPayment(invoiceId);
   };
 
   const overview = useMemo(() => {
