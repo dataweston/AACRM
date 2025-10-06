@@ -1261,7 +1261,7 @@ export default function HomePage() {
                         };
                       })
                       .filter(
-                        (entry): entry is { vendor: Vendor; cost?: number } => Boolean(entry?.vendor)
+                        (entry): entry is { vendor: Vendor; cost: number | undefined } => entry !== null
                       );
                     const vendorSummaryParts: string[] = [];
                     if (event.venue) {
