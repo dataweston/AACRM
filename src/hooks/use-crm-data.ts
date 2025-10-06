@@ -8,6 +8,11 @@ import type { CRMData, Client, Event, Invoice, InvoiceItem, Vendor } from "@/typ
 
 const STORAGE_KEY = "aacrm-storage-v1";
 
+function withGeneratedId(item: Omit<Client, "id">): Client;
+function withGeneratedId(item: Omit<Vendor, "id">): Vendor;
+function withGeneratedId(item: Omit<Event, "id">): Event;
+function withGeneratedId(item: Omit<Invoice, "id">): Invoice;
+function withGeneratedId<T extends { id?: string }>(item: T): T & { id: string };
 function withGeneratedId<T extends { id?: string }>(item: T) {
   return {
     ...item,
