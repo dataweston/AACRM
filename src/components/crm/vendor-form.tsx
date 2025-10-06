@@ -23,6 +23,7 @@ interface VendorFormProps {
 const createDefaultForm = () => ({
   name: "",
   service: "",
+  cost: "",
   email: "",
   phone: "",
   website: "",
@@ -48,6 +49,7 @@ export function VendorForm({
       setForm({
         name: initialVendor.name,
         service: initialVendor.service,
+        cost: typeof initialVendor.cost === "number" ? String(initialVendor.cost) : "",
         email: initialVendor.email ?? "",
         phone: initialVendor.phone ?? "",
         website: initialVendor.website ?? "",
@@ -76,6 +78,13 @@ export function VendorForm({
       nextErrors.email = "Enter a valid email.";
     }
 
+    if (form.cost) {
+      const parsedCost = Number.parseFloat(form.cost);
+      if (Number.isNaN(parsedCost) || parsedCost < 0) {
+        nextErrors.cost = "Enter a valid cost or leave blank.";
+      }
+    }
+
     if (form.phone && !phonePattern.test(form.phone.trim())) {
       nextErrors.phone = "Enter a valid phone number.";
     }
@@ -86,7 +95,7 @@ export function VendorForm({
         if (!url.protocol.startsWith("http")) {
           nextErrors.website = "Include http:// or https://";
         }
-      } catch (error) {
+      } catch {
         nextErrors.website = "Enter a valid URL.";
       }
     }
@@ -105,6 +114,7 @@ export function VendorForm({
     const payload: Omit<Vendor, "id"> = {
       name: form.name.trim(),
       service: form.service.trim(),
+      cost: form.cost.trim() ? Number.parseFloat(form.cost) : undefined,
       email: form.email.trim() ? form.email.trim() : undefined,
       phone: form.phone.trim() ? form.phone.trim() : undefined,
       website: form.website.trim() ? form.website.trim() : undefined,
@@ -158,6 +168,20 @@ export function VendorForm({
               aria-invalid={Boolean(errors.service)}
             />
             {errors.service && <p className="text-xs text-destructive">{errors.service}</p>}
+          </div>
+          <div className="grid gap-2">
+            <Label htmlFor="vendor-cost">Typical cost</Label>
+            <Input
+              id="vendor-cost"
+              type="number"
+              min="0"
+              step="0.01"
+              placeholder="Average spend with this vendor"
+              value={form.cost}
+              onChange={(event) => setForm((prev) => ({ ...prev, cost: event.target.value }))}
+              aria-invalid={Boolean(errors.cost)}
+            />
+            {errors.cost && <p className="text-xs text-destructive">{errors.cost}</p>}
           </div>
           <div className="grid gap-2 sm:grid-cols-2 sm:gap-4">
             <div className="grid gap-2">

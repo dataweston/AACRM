@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { formatCurrency } from "@/lib/format";
 import type { Client, Event as EventType, Vendor } from "@/types/crm";
 
 type EventFormMode = "create" | "edit";
@@ -383,7 +384,9 @@ export function EventForm({
                   >
                     <div className="flex flex-col">
                       <span className="font-medium text-foreground">{vendor.name}</span>
-                      <span className="text-xs text-muted-foreground">{vendor.service}</span>
+                      <span className="text-xs text-muted-foreground">
+                        {vendor.service} · {formatCurrency(vendor.cost ?? 0)}
+                      </span>
                     </div>
                     <input
                       id={inputId}
