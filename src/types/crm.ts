@@ -30,6 +30,7 @@ export interface Event {
   venue: string;
   coordinator: string;
   timeline?: string;
+  vendorIds?: string[];
   status: "scheduled" | "in-progress" | "wrap-up";
 }
 
