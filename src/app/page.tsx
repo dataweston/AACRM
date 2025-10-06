@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { type DragEvent, useMemo, useState } from "react";
 import {
   ArrowUpRight,
   CalendarDays,
@@ -87,6 +87,12 @@ export default function HomePage() {
   const [editingVendorId, setEditingVendorId] = useState<string | null>(null);
   const [editingEventId, setEditingEventId] = useState<string | null>(null);
   const [editingInvoiceId, setEditingInvoiceId] = useState<string | null>(null);
+  const [draggingClientId, setDraggingClientId] = useState<string | null>(null);
+  const [activeDropColumn, setActiveDropColumn] = useState<Client["status"] | null>(null);
+  const [isImportDragActive, setIsImportDragActive] = useState(false);
+  const [importSummary, setImportSummary] = useState<string | null>(null);
+  const [importError, setImportError] = useState<string | null>(null);
+  const [, setDropzoneDepth] = useState(0);
 
   const editingClient = useMemo(
     () => (editingClientId ? data.clients.find((client) => client.id === editingClientId) ?? null : null),
@@ -123,6 +129,231 @@ export default function HomePage() {
     }
     deleteClient(id);
     setEditingClientId((current) => (current === id ? null : current));
+  };
+
+  const isClientDrag = (event: DragEvent<HTMLElement>) => {
+    const transfer = event.dataTransfer;
+    if (!transfer) return false;
+    return Array.from(transfer.types ?? []).includes("application/aacrm-client-id");
+  };
+
+  const handleDragStart = (event: DragEvent<HTMLDivElement>, clientId: string) => {
+    setDraggingClientId(clientId);
+    event.dataTransfer.setData("application/aacrm-client-id", clientId);
+    event.dataTransfer.effectAllowed = "move";
+  };
+
+  const handleDragEnd = () => {
+    setDraggingClientId(null);
+    setActiveDropColumn(null);
+  };
+
+  const handleColumnDragOver = (event: DragEvent<HTMLDivElement>, status: Client["status"]) => {
+    if (!isClientDrag(event)) return;
+    event.preventDefault();
+    if (event.dataTransfer) {
+      event.dataTransfer.dropEffect = "move";
+    }
+    setActiveDropColumn(status);
+  };
+
+  const handleColumnDragLeave = (event: DragEvent<HTMLDivElement>, status: Client["status"]) => {
+    if (!isClientDrag(event)) return;
+    if (!event.currentTarget.contains(event.relatedTarget as Node)) {
+      setActiveDropColumn((current) => (current === status ? null : current));
+    }
+  };
+
+  const handleColumnDrop = (event: DragEvent<HTMLDivElement>, status: Client["status"]) => {
+    if (!isClientDrag(event)) return;
+    event.preventDefault();
+    const clientId = event.dataTransfer.getData("application/aacrm-client-id");
+    setActiveDropColumn(null);
+    setDraggingClientId(null);
+    if (!clientId) return;
+    const client = data.clients.find((entry) => entry.id === clientId);
+    if (!client || client.status === status) {
+      return;
+    }
+    const { id: _clientId, ...clientWithoutId } = client;
+    void _clientId;
+    updateClient(clientId, { ...clientWithoutId, status });
+  };
+
+  const normalizeStatus = (value?: string): Client["status"] => {
+    if (!value) return "lead";
+    const normalized = value.trim().toLowerCase();
+    if (["lead", "booked", "planning", "completed"].includes(normalized)) {
+      return normalized as Client["status"];
+    }
+    if (normalized.includes("book")) return "booked";
+    if (normalized.includes("plan")) return "planning";
+    if (normalized.includes("wrap") || normalized.includes("complete")) return "completed";
+    return "lead";
+  };
+
+  const parseDateValue = (value?: string) => {
+    if (!value) return undefined;
+    const trimmed = value.trim();
+    if (!trimmed) return undefined;
+    const parsed = new Date(trimmed);
+    if (Number.isNaN(parsed.getTime())) return undefined;
+    return parsed.toISOString().slice(0, 10);
+  };
+
+  const parseBudgetValue = (value?: string) => {
+    if (!value) return undefined;
+    const cleaned = value.replace(/[^0-9.,-]/g, "").replace(/,/g, "");
+    if (!cleaned) return undefined;
+    const amount = Number.parseFloat(cleaned);
+    return Number.isNaN(amount) ? undefined : amount;
+  };
+
+  const splitLine = (line: string) => {
+    const pipeParts = line.split("|").map((part) => part.trim()).filter(Boolean);
+    if (pipeParts.length > 1) return pipeParts;
+    const commaParts = line.split(",").map((part) => part.trim()).filter((part) => part.length > 0);
+    if (commaParts.length > 1) return commaParts;
+    const dashParts = line.split(" - ").map((part) => part.trim()).filter(Boolean);
+    if (dashParts.length > 1) return dashParts;
+    return [line.trim()];
+  };
+
+  const parseClientsFromText = (text: string) => {
+    const created: Omit<Client, "id">[] = [];
+    const skipped: string[] = [];
+
+    text
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter((line) => line.length > 0)
+      .forEach((line) => {
+        const fields = splitLine(line).map((field) => field.replace(/\t+/g, " ").trim());
+        if (fields.length === 0 || !fields[0]) {
+          skipped.push(line);
+          return;
+        }
+
+        const [name, email = "", phone, statusRaw, eventDateRaw, budgetRaw, ...notesParts] = fields;
+        const notes = notesParts.join(", ").trim();
+
+        if (!name) {
+          skipped.push(line);
+          return;
+        }
+
+        created.push({
+          name,
+          email,
+          phone: phone && phone.length > 0 ? phone : undefined,
+          status: normalizeStatus(statusRaw),
+          eventDate: parseDateValue(eventDateRaw),
+          budget: parseBudgetValue(budgetRaw),
+          notes: notes.length > 0 ? notes : undefined,
+        });
+      });
+
+    return { created, skipped };
+  };
+
+  const readFileAsText = (file: File) =>
+    new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(typeof reader.result === "string" ? reader.result : "");
+      reader.onerror = () => reject(reader.error);
+      reader.readAsText(file);
+    });
+
+  const handleImportDrop = (event: DragEvent<HTMLDivElement>) => {
+    if (isClientDrag(event)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    setIsImportDragActive(false);
+    setDropzoneDepth(0);
+
+    const dataTransfer = event.dataTransfer;
+    const files = Array.from(dataTransfer?.files ?? []);
+    const textFragments: string[] = [];
+
+    void (async () => {
+      try {
+        setImportSummary(null);
+        setImportError(null);
+
+        for (const file of files) {
+          if (file.type.startsWith("text/") || /\.(txt|csv)$/i.test(file.name)) {
+            const content = await readFileAsText(file);
+            if (content) {
+              textFragments.push(content);
+            }
+          } else {
+            setImportError("Only text drops or .txt/.csv files are supported.");
+            return;
+          }
+        }
+
+        const plainText = dataTransfer?.getData("text/plain") ?? "";
+        if (plainText) {
+          textFragments.push(plainText);
+        }
+
+        const combined = textFragments.join("\n");
+        if (!combined.trim()) {
+          setImportError("Drop text snippets or text files to import clients.");
+          return;
+        }
+
+        const { created, skipped } = parseClientsFromText(combined);
+
+        if (created.length === 0) {
+          setImportError("No recognizable client rows were found in that drop.");
+          return;
+        }
+
+        created.forEach((client) => addClient(client));
+
+        const summary: string[] = [];
+        summary.push(`Added ${created.length} client${created.length === 1 ? "" : "s"}.`);
+        if (skipped.length > 0) {
+          summary.push(`Skipped ${skipped.length} line${skipped.length === 1 ? "" : "s"} that we couldn't parse.`);
+        }
+        setImportSummary(summary.join(" "));
+        if (skipped.length > 0) {
+          setImportError("Some lines were skipped. Confirm they follow the Name | Email | Phone | Status pattern.");
+        }
+      } catch (error) {
+        console.error("Failed to import dropped text", error);
+        setImportError("We couldn't process that drop. Please try again with a text snippet or .txt file.");
+      }
+    })();
+  };
+
+  const handleImportDragOver = (event: DragEvent<HTMLDivElement>) => {
+    if (isClientDrag(event)) return;
+    event.preventDefault();
+    if (event.dataTransfer) {
+      event.dataTransfer.dropEffect = "copy";
+    }
+    setIsImportDragActive(true);
+  };
+
+  const handleImportDragEnter = (event: DragEvent<HTMLDivElement>) => {
+    if (isClientDrag(event)) return;
+    event.preventDefault();
+    setDropzoneDepth((depth) => depth + 1);
+    setIsImportDragActive(true);
+  };
+
+  const handleImportDragLeave = (event: DragEvent<HTMLDivElement>) => {
+    if (isClientDrag(event)) return;
+    event.preventDefault();
+    setDropzoneDepth((depth) => {
+      const next = Math.max(0, depth - 1);
+      if (next === 0) {
+        setIsImportDragActive(false);
+      }
+      return next;
+    });
   };
 
   const handleVendorSubmit = (values: Omit<Vendor, "id">, id?: string) => {
@@ -495,28 +726,49 @@ export default function HomePage() {
                 <CardHeader className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                   <div>
                     <CardTitle>Client pipeline</CardTitle>
-                    <CardDescription>Drag-free Kanban snapshot for your studio review</CardDescription>
+                    <CardDescription>
+                      Drag clients between stages or drop a text list to capture new leads in seconds.
+                    </CardDescription>
                   </div>
                   <Badge variant="neutral">{overview.totalClients} in play</Badge>
                 </CardHeader>
-                <CardContent>
+                <CardContent className="space-y-4">
                   <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
                     {overview.pipeline.map((column) => (
-                      <div key={column.id} className="space-y-3 rounded-2xl border border-border/70 bg-muted/40 p-4">
+                      <div
+                        key={column.id}
+                        className={cn(
+                          "space-y-3 rounded-2xl border border-border/70 bg-muted/40 p-4 transition",
+                          activeDropColumn === column.id &&
+                            "border-primary/70 bg-primary/5 shadow-sm"
+                        )}
+                        data-status={column.id}
+                        onDragEnter={(event) => handleColumnDragOver(event, column.id)}
+                        onDragOver={(event) => handleColumnDragOver(event, column.id)}
+                        onDragLeave={(event) => handleColumnDragLeave(event, column.id)}
+                        onDrop={(event) => handleColumnDrop(event, column.id)}
+                      >
                         <div className="flex items-center justify-between text-sm font-semibold text-foreground">
                           <span>{column.label}</span>
                           <span className="text-xs text-muted-foreground">{column.items.length}</span>
                         </div>
                         {column.items.length === 0 ? (
                           <p className="text-xs text-muted-foreground">
-                            No records yet. Add a client to populate this column.
+                            No records yet. Drop a card here or import a client list below.
                           </p>
                         ) : (
                           <div className="space-y-3">
                             {column.items.map((client) => (
                               <div
                                 key={client.id}
-                                className="space-y-2 rounded-xl border border-border/70 bg-background/70 p-3 text-xs"
+                                className={cn(
+                                  "space-y-2 rounded-xl border border-border/70 bg-background/70 p-3 text-xs transition",
+                                  draggingClientId === client.id ? "opacity-50" : "hover:border-primary/50 hover:shadow-sm"
+                                )}
+                                draggable
+                                onDragStart={(event) => handleDragStart(event, client.id)}
+                                onDragEnd={handleDragEnd}
+                                aria-grabbed={draggingClientId === client.id}
                               >
                                 <div className="flex items-center justify-between">
                                   <p className="font-medium text-foreground">{client.name}</p>
@@ -537,6 +789,31 @@ export default function HomePage() {
                       </div>
                     ))}
                   </div>
+                  <div
+                    className={cn(
+                      "flex flex-col items-center justify-center gap-2 rounded-2xl border border-dashed border-border/60 bg-muted/30 p-6 text-center text-xs text-muted-foreground transition",
+                      isImportDragActive && "border-primary/60 bg-primary/5 text-primary"
+                    )}
+                    onDragEnter={handleImportDragEnter}
+                    onDragLeave={handleImportDragLeave}
+                    onDragOver={handleImportDragOver}
+                    onDrop={handleImportDrop}
+                  >
+                    <p className="text-sm font-medium text-foreground">Drop text to add clients</p>
+                    <p className="max-w-md">
+                      Paste or drop lines formatted like
+                      <span className="mx-1 rounded bg-background px-1 py-0.5 font-mono text-[11px] text-foreground">
+                        Name | Email | Phone | Status | Event Date | Budget | Notes
+                      </span>
+                      or upload a .txt/.csv file.
+                    </p>
+                  </div>
+                  {(importSummary || importError) && (
+                    <div className="space-y-1 text-xs">
+                      {importSummary && <p className="text-foreground">{importSummary}</p>}
+                      {importError && <p className="text-destructive">{importError}</p>}
+                    </div>
+                  )}
                 </CardContent>
               </Card>
 
