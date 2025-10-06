@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ChangeEvent, ClipboardEvent, DragEvent, KeyboardEvent } from "react";
 import { Apple, Globe, Mail, Phone, Search, Sparkles } from "lucide-react";
 import { ClientForm } from "@/components/crm/client-form";
@@ -83,6 +83,11 @@ export default function HomePage() {
   const [editingEventId, setEditingEventId] = useState<string | null>(null);
   const [editingInvoiceId, setEditingInvoiceId] = useState<string | null>(null);
   const [recordsTab, setRecordsTab] = useState<"clients" | "events" | "vendors">("clients");
+  const handleRecordsTabChange = useCallback((value: string) => {
+    if (value === "clients" || value === "events" || value === "vendors") {
+      setRecordsTab(value);
+    }
+  }, []);
   const [isOffline, setIsOffline] = useState(false);
   const { session, status, signInWithApple, signOut } = useAuth();
   const [appleName, setAppleName] = useState("");
@@ -1053,7 +1058,7 @@ export default function HomePage() {
           </TabsContent>
 
           <TabsContent value="records" className="space-y-8">
-            <Tabs value={recordsTab} onValueChange={setRecordsTab} className="space-y-6">
+            <Tabs value={recordsTab} onValueChange={handleRecordsTabChange} className="space-y-6">
               <TabsList className="flex w-full flex-wrap gap-2 bg-muted/70 p-2 text-xs sm:text-sm">
                 <TabsTrigger value="clients">Clients</TabsTrigger>
                 <TabsTrigger value="events">Events</TabsTrigger>
