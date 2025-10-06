@@ -28,9 +28,11 @@ export interface Event {
   date: string;
   clientId: string;
   venue: string;
+  venueCost?: number;
   coordinator: string;
   timeline?: string;
   vendorIds?: string[];
+  vendorCosts?: Record<string, number>;
   status: "contacted" | "bid" | "confirmed";
   estimate?: number;
   deposit?: number;
@@ -43,6 +45,15 @@ export interface InvoiceItem {
   amount: number;
 }
 
+export type InvoiceWixStatus = "not_created" | "generated" | "sent" | "paid";
+
+export interface InvoiceWixDetails {
+  status: InvoiceWixStatus;
+  invoiceId?: string;
+  paymentLink?: string;
+  lastActionAt?: string;
+}
+
 export interface Invoice {
   id: string;
   clientId: string;
@@ -52,6 +63,7 @@ export interface Invoice {
   total: number;
   items: InvoiceItem[];
   notes?: string;
+  wix?: InvoiceWixDetails;
 }
 
 export interface CRMData {

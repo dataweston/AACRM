@@ -86,7 +86,7 @@ export function VendorForm({
         if (!url.protocol.startsWith("http")) {
           nextErrors.website = "Include http:// or https://";
         }
-      } catch (error) {
+      } catch {
         nextErrors.website = "Enter a valid URL.";
       }
     }

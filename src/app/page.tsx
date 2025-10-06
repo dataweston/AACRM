@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ChangeEvent, ClipboardEvent, DragEvent, KeyboardEvent } from "react";
-import { Apple, Globe, Mail, Phone, Search, Sparkles } from "lucide-react";
+import { Apple, ExternalLink, Globe, Mail, Phone, Search, Sparkles } from "lucide-react";
 import { ClientForm } from "@/components/crm/client-form";
 import { EventForm } from "@/components/crm/event-form";
 import { InvoiceForm } from "@/components/crm/invoice-form";
@@ -23,7 +23,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { useCrmData } from "@/hooks/use-crm-data";
 import { formatCurrency, formatDate } from "@/lib/format";
-import type { Client, Event as EventRecord, Invoice, Vendor } from "@/types/crm";
+import type { Client, Event as EventRecord, Invoice, InvoiceWixStatus, Vendor } from "@/types/crm";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/components/auth/auth-provider";
 
@@ -39,6 +39,29 @@ const invoiceStatusStyles: Record<Invoice["status"], string> = {
   sent: "bg-secondary text-secondary-foreground",
   paid: "bg-emerald-100 text-emerald-700",
   overdue: "bg-destructive/20 text-destructive",
+};
+
+const wixStatusCopy: Record<InvoiceWixStatus, { label: string; description: string; badge: string }> = {
+  not_created: {
+    label: "Not connected",
+    description: "Generate a Wix invoice to sync billing.",
+    badge: "bg-muted text-muted-foreground",
+  },
+  generated: {
+    label: "Draft in Wix",
+    description: "Invoice draft saved in Wix Billing.",
+    badge: "bg-sky-100 text-sky-700",
+  },
+  sent: {
+    label: "Sent via Wix",
+    description: "Invoice delivered through Wix with payment tracking.",
+    badge: "bg-secondary text-secondary-foreground",
+  },
+  paid: {
+    label: "Paid in Wix",
+    description: "Payment collected in Wix and synced here.",
+    badge: "bg-emerald-100 text-emerald-700",
+  },
 };
 
 const clientStatusLabels: Record<Client["status"], string> = {
@@ -111,6 +134,9 @@ export default function HomePage() {
     addInvoice,
     updateInvoice,
     deleteInvoice,
+    generateWixInvoice,
+    sendWixInvoice,
+    collectWixPayment,
   } = useCrmData();
   const [activeTab, setActiveTab] = useState("overview");
   const [vendorSearch, setVendorSearch] = useState("");
@@ -119,9 +145,6 @@ export default function HomePage() {
   const [editingVendorId, setEditingVendorId] = useState<string | null>(null);
   const [editingEventId, setEditingEventId] = useState<string | null>(null);
   const [editingInvoiceId, setEditingInvoiceId] = useState<string | null>(null);
-  const [selectedClientIds, setSelectedClientIds] = useState<string[]>([]);
-  const [selectedEventIds, setSelectedEventIds] = useState<string[]>([]);
-  const [selectedVendorIds, setSelectedVendorIds] = useState<string[]>([]);
   const [recordsTab, setRecordsTab] = useState<"clients" | "events" | "vendors">("clients");
   const handleRecordsTabChange = useCallback((value: string) => {
     if (value === "clients" || value === "events" || value === "vendors") {
@@ -892,9 +915,11 @@ export default function HomePage() {
   return (
     <div className="min-h-screen bg-background">
       <header className="border-b border-border/50 bg-background/80 backdrop-blur">
-        <div className="mx-auto flex w-full max-w-6xl items-center justify-between gap-3 px-4 py-3 text-xs sm:text-sm">
-          <div className="text-muted-foreground">
-            Signed in as {session.user?.name || session.user?.email || "your team"}
+        <div className="mx-auto flex w-full max-w-6xl flex-wrap items-center justify-between gap-3 px-4 py-3 text-xs sm:text-sm">
+          <div className="flex items-center gap-3 text-muted-foreground">
+            <span className="font-semibold uppercase tracking-[0.35em] text-foreground">AACRM</span>
+            <span aria-hidden className="hidden h-4 border-l border-border/60 sm:inline" />
+            <span>Signed in as {session.user?.name || session.user?.email || "your team"}</span>
           </div>
           <div className="flex items-center gap-2">
             {isOffline && (
@@ -1210,12 +1235,36 @@ export default function HomePage() {
                   )}
                   {overview.upcomingEvents.map((event) => {
                     const client = clientMap.get(event.clientId);
-                    const assignedVendors = (event.vendorIds ?? [])
-                      .map((vendorId) => vendorMap.get(vendorId) ?? null)
-                      .filter((vendor): vendor is Vendor => Boolean(vendor));
-                    const vendorSummary = assignedVendors
-                      .map((vendor) => `${vendor.name} (${formatCurrency(vendor.cost ?? 0)})`)
-                      .join(", ");
+                    const assignedVendorDetails = (event.vendorIds ?? [])
+                      .map((vendorId) => {
+                        const vendor = vendorMap.get(vendorId);
+                        if (!vendor) {
+                          return null;
+                        }
+
+                        return {
+                          vendor,
+                          cost: event.vendorCosts?.[vendorId],
+                        };
+                      })
+                      .filter(
+                        (entry): entry is { vendor: Vendor; cost?: number } => Boolean(entry?.vendor)
+                      );
+                    const vendorSummaryParts: string[] = [];
+                    if (event.venue) {
+                      const venueCost = event.venueCost;
+                      vendorSummaryParts.push(
+                        `${event.venue}${
+                          typeof venueCost === "number" ? ` (${formatCurrency(venueCost)})` : ""
+                        }`
+                      );
+                    }
+                    vendorSummaryParts.push(
+                      ...assignedVendorDetails.map(({ vendor, cost }) =>
+                        `${vendor.name}${typeof cost === "number" ? ` (${formatCurrency(cost)})` : ""}`
+                      )
+                    );
+                    const vendorSummary = vendorSummaryParts.join(", ");
                     return (
                       <button
                         key={event.id}
@@ -1254,7 +1303,7 @@ export default function HomePage() {
                             Deposit {event.depositPaid ? "received" : "due"} · {formatCurrency(event.deposit)}
                           </p>
                         )}
-                        {assignedVendors.length > 0 && (
+                        {vendorSummary && (
                           <p className="text-xs text-muted-foreground">
                             Vendors · {vendorSummary}
                           </p>
@@ -1502,39 +1551,46 @@ export default function HomePage() {
                       </div>
                     </CardHeader>
                     <CardContent className="space-y-3">
-                      {data.events.map((event) => {
-                        const client = clientMap.get(event.clientId);
-                        const assignedVendors = (event.vendorIds ?? [])
-                          .map((vendorId) => vendorMap.get(vendorId) ?? null)
-                          .filter((vendor): vendor is Vendor => Boolean(vendor));
-                        const vendorSummary = assignedVendors
-                          .map((vendor) => `${vendor.name} (${formatCurrency(vendor.cost ?? 0)})`)
-                          .join(", ");
-                        const isSelected = selectedEventIds.includes(event.id);
+                    {data.events.map((event) => {
+                      const client = clientMap.get(event.clientId);
+                      const assignedVendorDetails = (event.vendorIds ?? [])
+                        .map((vendorId) => {
+                          const vendor = vendorMap.get(vendorId);
+                          if (!vendor) {
+                            return null;
+                          }
 
-                        return (
-                          <div
-                            key={event.id}
-                            className={cn(
-                              "space-y-2 rounded-xl border border-border/80 bg-muted/40 p-4",
-                              isSelected && "border-primary/60 bg-primary/5"
-                            )}
-                          >
-                            <div className="flex flex-wrap items-start justify-between gap-3">
-                              <div className="flex items-start gap-3">
-                                <input
-                                  type="checkbox"
-                                  aria-label={`Select ${event.name}`}
-                                  checked={isSelected}
-                                  onChange={() => toggleEventSelection(event.id)}
-                                  className="mt-1 h-4 w-4 rounded border border-border text-primary accent-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 focus-visible:ring-offset-0"
-                                />
-                                <div>
-                                  <h3 className="text-base font-semibold text-foreground">{event.name}</h3>
-                                  <p className="text-xs text-muted-foreground">
-                                    {formatDate(event.date)} · {event.venue}
-                                  </p>
-                                </div>
+                          return {
+                            vendor,
+                            cost: event.vendorCosts?.[vendorId],
+                          };
+                        })
+                        .filter(
+                          (entry): entry is { vendor: Vendor; cost?: number } => Boolean(entry?.vendor)
+                        );
+                      const vendorSummaryParts: string[] = [];
+                      if (event.venue) {
+                        const venueCost = event.venueCost;
+                        vendorSummaryParts.push(
+                          `${event.venue}${
+                            typeof venueCost === "number" ? ` (${formatCurrency(venueCost)})` : ""
+                          }`
+                        );
+                      }
+                      vendorSummaryParts.push(
+                        ...assignedVendorDetails.map(({ vendor, cost }) =>
+                          `${vendor.name}${typeof cost === "number" ? ` (${formatCurrency(cost)})` : ""}`
+                        )
+                      );
+                      const vendorSummary = vendorSummaryParts.join(", ");
+                      return (
+                          <div key={event.id} className="space-y-2 rounded-xl border border-border/80 bg-muted/40 p-4">
+                            <div className="flex flex-wrap items-center justify-between gap-3">
+                              <div>
+                                <h3 className="text-base font-semibold text-foreground">{event.name}</h3>
+                                <p className="text-xs text-muted-foreground">
+                                  {formatDate(event.date)} · {event.venue}
+                                </p>
                               </div>
                               <div className="flex flex-wrap items-center gap-2">
                                 <Badge variant="neutral" className="capitalize">
@@ -1573,7 +1629,7 @@ export default function HomePage() {
                                 Deposit {event.depositPaid ? "received" : "due"} · {formatCurrency(event.deposit)}
                               </p>
                             )}
-                            {assignedVendors.length > 0 && (
+                            {vendorSummary && (
                               <p className="text-xs text-muted-foreground">
                                 Vendors · {vendorSummary}
                               </p>
@@ -1695,42 +1751,63 @@ export default function HomePage() {
                             : "Add your first vendor to start building your partner roster."}
                         </p>
                       ) : (
-                        filteredVendors.map((vendor) => {
-                          const isSelected = selectedVendorIds.includes(vendor.id);
-
-                          return (
-                            <div
-                              key={vendor.id}
-                              className={cn(
-                                "space-y-3 rounded-xl border border-border/80 bg-muted/40 p-4",
-                                isSelected && "border-primary/60 bg-primary/5"
-                              )}
-                            >
-                              <div className="flex flex-wrap items-start justify-between gap-3">
-                                <div className="flex items-start gap-3">
-                                  <input
-                                    type="checkbox"
-                                    aria-label={`Select ${vendor.name}`}
-                                    checked={isSelected}
-                                    onChange={() => toggleVendorSelection(vendor.id)}
-                                    className="mt-1 h-4 w-4 rounded border border-border text-primary accent-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 focus-visible:ring-offset-0"
-                                  />
-                                  <div>
-                                    <h3 className="text-base font-semibold text-foreground">{vendor.name}</h3>
-                                    <p className="text-xs text-muted-foreground">
-                                      {vendor.service}
-                                      {typeof vendor.cost === "number" && ` · ${formatCurrency(vendor.cost)}`}
-                                    </p>
-                                  </div>
-                                </div>
-                                <div className="flex flex-wrap items-center gap-2">
-                                  {vendor.preferredContact ? (
-                                    <Badge variant="neutral" className="capitalize">
-                                      Prefers {preferredContactLabels[vendor.preferredContact]}
-                                    </Badge>
-                                  ) : (
-                                    <Badge variant="neutral">Flexible contact</Badge>
-                                  )}
+                        filteredVendors.map((vendor) => (
+                          <div key={vendor.id} className="space-y-3 rounded-xl border border-border/80 bg-muted/40 p-4">
+                          <div className="flex flex-wrap items-center justify-between gap-3">
+                            <div>
+                              <h3 className="text-base font-semibold text-foreground">{vendor.name}</h3>
+                              <p className="text-xs text-muted-foreground">
+                                {vendor.service} · Costs tracked per event
+                              </p>
+                            </div>
+                              <div className="flex flex-wrap items-center gap-2">
+                                {vendor.preferredContact ? (
+                                  <Badge variant="neutral" className="capitalize">
+                                    Prefers {preferredContactLabels[vendor.preferredContact]}
+                                  </Badge>
+                                ) : (
+                                  <Badge variant="neutral">Flexible contact</Badge>
+                                )}
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="ghost"
+                                  onClick={() => setEditingVendorId(vendor.id)}
+                                >
+                                  Edit
+                                </Button>
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="ghost"
+                                  className="text-destructive hover:text-destructive"
+                                  onClick={() => handleVendorDelete(vendor.id)}
+                                >
+                                  Delete
+                                </Button>
+                              </div>
+                            </div>
+                            <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+                              {vendor.email && <span>{vendor.email}</span>}
+                              {vendor.phone && <span>{vendor.phone}</span>}
+                              {vendor.website && <span>{vendor.website}</span>}
+                            </div>
+                            {(vendor.email || vendor.phone || vendor.website) && (
+                              <div className="flex flex-wrap items-center gap-2 text-xs">
+                                {vendor.email && (
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    className="h-8 rounded-full px-3"
+                                    asChild
+                                  >
+                                    <a href={`mailto:${vendor.email}`} className="inline-flex items-center gap-1.5">
+                                      <Mail className="h-4 w-4" /> Email
+                                    </a>
+                                  </Button>
+                                )}
+                                {vendor.phone && (
                                   <Button
                                     type="button"
                                     size="sm"
@@ -1838,6 +1915,11 @@ export default function HomePage() {
                 <CardContent className="space-y-3">
                   {data.invoices.map((invoice) => {
                     const client = clientMap.get(invoice.clientId);
+                    const wixStatus = (invoice.wix?.status ?? "not_created") as InvoiceWixStatus;
+                    const wixMeta = wixStatusCopy[wixStatus];
+                    const wixLastUpdated = invoice.wix?.lastActionAt
+                      ? formatDate(invoice.wix.lastActionAt)
+                      : null;
                     return (
                       <div key={invoice.id} className="space-y-3 rounded-xl border border-border/80 bg-muted/40 p-4">
                         <div className="flex flex-wrap items-center justify-between gap-3">
@@ -1887,6 +1969,67 @@ export default function HomePage() {
                             </li>
                           ))}
                         </ul>
+                        <div className="rounded-lg border border-dashed border-primary/40 bg-primary/5 p-3">
+                          <div className="flex flex-wrap items-start justify-between gap-3">
+                            <div className="space-y-1">
+                              <p className="text-sm font-semibold text-foreground">Wix billing</p>
+                              <p className="text-xs text-muted-foreground">
+                                {wixMeta.description}
+                                {wixLastUpdated && (
+                                  <span className="block">Last updated {wixLastUpdated}</span>
+                                )}
+                              </p>
+                              {invoice.wix?.invoiceId && (
+                                <p className="text-xs text-muted-foreground">
+                                  Wix invoice ID: {invoice.wix.invoiceId}
+                                </p>
+                              )}
+                            </div>
+                            <Badge className={`${wixMeta.badge} whitespace-nowrap`}>{wixMeta.label}</Badge>
+                          </div>
+                          <div className="mt-3 flex flex-wrap items-center gap-2">
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="secondary"
+                              onClick={() => handleGenerateWixInvoice(invoice.id)}
+                            >
+                              {invoice.wix?.invoiceId ? "Regenerate Wix invoice" : "Generate Wix invoice"}
+                            </Button>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              onClick={() => handleSendWixInvoice(invoice.id)}
+                              disabled={wixStatus === "not_created"}
+                            >
+                              Send via Wix
+                            </Button>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="ghost"
+                              className="text-primary hover:text-primary"
+                              onClick={() => handleCollectWixPayment(invoice.id)}
+                              disabled={wixStatus !== "sent"}
+                            >
+                              Collect payment in Wix
+                            </Button>
+                            {invoice.wix?.paymentLink && (
+                              <Button asChild size="sm" variant="link" className="pl-0 text-primary">
+                                <Link
+                                  href={invoice.wix.paymentLink}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="inline-flex items-center gap-1"
+                                >
+                                  <ExternalLink className="h-4 w-4" />
+                                  View in Wix
+                                </Link>
+                              </Button>
+                            )}
+                          </div>
+                        </div>
                       </div>
                     );
                   })}

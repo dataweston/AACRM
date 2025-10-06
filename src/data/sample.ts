@@ -62,9 +62,14 @@ export const sampleData: CRMData = {
       date: "2025-06-21",
       clientId: "client-luna-harper",
       venue: "Seaside Conservatory",
+      venueCost: 12500,
       coordinator: "Amelia Sloan",
       timeline: "Ceremony 4pm, Dinner 6pm, Dancing 8pm",
       vendorIds: ["vendor-aurora-florals", "vendor-lyra-catering"],
+      vendorCosts: {
+        "vendor-aurora-florals": 7200,
+        "vendor-lyra-catering": 15800,
+      },
       status: "confirmed",
       estimate: 38000,
       deposit: 8000,
@@ -76,9 +81,13 @@ export const sampleData: CRMData = {
       date: "2025-04-12",
       clientId: "client-nora-ellis",
       venue: "Atrium 55",
+      venueCost: 9800,
       coordinator: "Miles Carter",
       timeline: "Keynote 7pm, Awards 8pm, Afterparty 10pm",
       vendorIds: ["vendor-lyra-catering"],
+      vendorCosts: {
+        "vendor-lyra-catering": 13450,
+      },
       status: "bid",
       estimate: 42000,
       deposit: 5000,
@@ -98,6 +107,13 @@ export const sampleData: CRMData = {
         { id: "item-2", description: "Vendor sourcing retainer", amount: 8000 },
       ],
       notes: "Payment due 15 days prior to gala load-in.",
+      wix: {
+        status: "sent",
+        invoiceId: "wix-1007",
+        paymentLink:
+          "https://manage.wix.com/dashboard/business-tools/invoices/invoice-1007",
+        lastActionAt: "2025-02-20T14:30:00.000Z",
+      },
     },
     {
       id: "invoice-1008",
@@ -111,6 +127,13 @@ export const sampleData: CRMData = {
         { id: "item-2", description: "Onsite coordination team", amount: 5600 },
       ],
       notes: "Paid via ACH on February 15.",
+      wix: {
+        status: "paid",
+        invoiceId: "wix-1008",
+        paymentLink:
+          "https://manage.wix.com/dashboard/business-tools/invoices/invoice-1008",
+        lastActionAt: "2025-02-15T09:10:00.000Z",
+      },
     },
   ],
 };

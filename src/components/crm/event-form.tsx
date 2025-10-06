@@ -29,10 +29,12 @@ type FormState = {
   date: string;
   clientId: string;
   venue: string;
+  venueCost: string;
   coordinator: string;
   timeline: string;
   status: EventStatus;
   vendorIds: string[];
+  vendorCosts: Record<string, string>;
   estimate: string;
   deposit: string;
   depositPaid: boolean;
@@ -49,10 +51,12 @@ const createDefaultForm = (): FormState => ({
   date: "",
   clientId: "",
   venue: "",
+  venueCost: "",
   coordinator: "",
   timeline: "",
   status: "contacted",
   vendorIds: [],
+  vendorCosts: {},
   estimate: "",
   deposit: "",
   depositPaid: false,
@@ -77,10 +81,19 @@ export function EventForm({
         date: initialEvent.date,
         clientId: initialEvent.clientId,
         venue: initialEvent.venue,
+        venueCost:
+          typeof initialEvent.venueCost === "number" ? String(initialEvent.venueCost) : "",
         coordinator: initialEvent.coordinator,
         timeline: initialEvent.timeline ?? "",
         status: initialEvent.status,
         vendorIds: initialEvent.vendorIds ? [...initialEvent.vendorIds] : [],
+        vendorCosts: Object.entries(initialEvent.vendorCosts ?? {}).reduce<Record<string, string>>(
+          (accumulator, [vendorId, value]) => {
+            accumulator[vendorId] = String(value);
+            return accumulator;
+          },
+          {}
+        ),
         estimate: typeof initialEvent.estimate === "number" ? String(initialEvent.estimate) : "",
         deposit: typeof initialEvent.deposit === "number" ? String(initialEvent.deposit) : "",
         depositPaid: Boolean(initialEvent.depositPaid),
@@ -97,19 +110,28 @@ export function EventForm({
 
   useEffect(() => {
     setForm((previous) => {
-      if (previous.vendorIds.length === 0) {
-        return previous;
-      }
-
       const validVendorIds = previous.vendorIds.filter((vendorId) => knownVendorIds.has(vendorId));
+      const validVendorCosts = Object.entries(previous.vendorCosts).reduce<Record<string, string>>(
+        (accumulator, [vendorId, value]) => {
+          if (knownVendorIds.has(vendorId)) {
+            accumulator[vendorId] = value;
+          }
+          return accumulator;
+        },
+        {}
+      );
 
-      if (validVendorIds.length === previous.vendorIds.length) {
+      if (
+        validVendorIds.length === previous.vendorIds.length &&
+        Object.keys(validVendorCosts).length === Object.keys(previous.vendorCosts).length
+      ) {
         return previous;
       }
 
       return {
         ...previous,
         vendorIds: validVendorIds,
+        vendorCosts: validVendorCosts,
       };
     });
   }, [knownVendorIds]);
@@ -133,6 +155,13 @@ export function EventForm({
       nextErrors.clientId = "Client no longer exists.";
     }
 
+    if (form.venueCost.trim()) {
+      const venueCostValue = Number(form.venueCost);
+      if (Number.isNaN(venueCostValue) || venueCostValue < 0) {
+        nextErrors.venueCost = "Enter a valid venue cost.";
+      }
+    }
+
     if (form.estimate.trim()) {
       const estimateValue = Number(form.estimate);
       if (Number.isNaN(estimateValue) || estimateValue < 0) {
@@ -151,6 +180,18 @@ export function EventForm({
       nextErrors.depositPaid = "Add a deposit amount before marking it paid.";
     }
 
+    form.vendorIds.forEach((vendorId) => {
+      const rawValue = form.vendorCosts[vendorId]?.trim();
+      if (!rawValue) {
+        return;
+      }
+
+      const parsed = Number(rawValue);
+      if (Number.isNaN(parsed) || parsed < 0) {
+        nextErrors[`vendorCost-${vendorId}`] = "Enter a valid vendor cost.";
+      }
+    });
+
     return nextErrors;
   };
 
@@ -163,20 +204,37 @@ export function EventForm({
     }
 
     const vendorIds = form.vendorIds.filter((vendorId) => knownVendorIds.has(vendorId));
+    const vendorCosts = vendorIds.reduce<Record<string, number>>((accumulator, vendorId) => {
+      const rawValue = form.vendorCosts[vendorId]?.trim();
+      if (!rawValue) {
+        return accumulator;
+      }
+
+      const parsed = Number(rawValue);
+      if (Number.isNaN(parsed) || parsed < 0) {
+        return accumulator;
+      }
+
+      accumulator[vendorId] = parsed;
+      return accumulator;
+    }, {});
 
     const estimate = form.estimate.trim() ? Number(form.estimate) : undefined;
     const deposit = form.deposit.trim() ? Number(form.deposit) : undefined;
     const depositPaid = deposit !== undefined ? form.depositPaid : false;
+    const venueCost = form.venueCost.trim() ? Number(form.venueCost) : undefined;
 
     const payload: Omit<EventType, "id"> = {
       name: form.name.trim(),
       date: form.date,
       clientId: form.clientId,
       venue: form.venue.trim(),
+      venueCost,
       coordinator: form.coordinator.trim(),
       timeline: form.timeline.trim() ? form.timeline.trim() : undefined,
       status: form.status,
       vendorIds: vendorIds.length > 0 ? vendorIds : undefined,
+      vendorCosts: Object.keys(vendorCosts).length > 0 ? vendorCosts : undefined,
       estimate,
       deposit,
       depositPaid,
@@ -201,8 +259,10 @@ export function EventForm({
   const toggleVendorId = (vendorId: string) => {
     setForm((previous) => {
       const vendorIds = new Set(previous.vendorIds);
+      const vendorCosts = { ...previous.vendorCosts };
       if (vendorIds.has(vendorId)) {
         vendorIds.delete(vendorId);
+        delete vendorCosts[vendorId];
       } else {
         vendorIds.add(vendorId);
       }
@@ -210,6 +270,7 @@ export function EventForm({
       return {
         ...previous,
         vendorIds: Array.from(vendorIds),
+        vendorCosts,
       };
     });
   };
@@ -294,16 +355,30 @@ export function EventForm({
               />
             </div>
             <div className="grid gap-2">
-              <Label htmlFor="event-coordinator">Coordinator</Label>
+              <Label htmlFor="event-venue-cost">Venue cost</Label>
               <Input
-                id="event-coordinator"
-                placeholder="Lead coordinator"
-                value={form.coordinator}
+                id="event-venue-cost"
+                type="number"
+                min="0"
+                step="0.01"
+                placeholder="Event-specific venue cost"
+                value={form.venueCost}
                 onChange={(event) =>
-                  setForm((prev) => ({ ...prev, coordinator: event.target.value }))
+                  setForm((prev) => ({ ...prev, venueCost: event.target.value }))
                 }
+                aria-invalid={Boolean(errors.venueCost)}
               />
+              {errors.venueCost && <p className="text-xs text-destructive">{errors.venueCost}</p>}
             </div>
+          </div>
+          <div className="grid gap-2">
+            <Label htmlFor="event-coordinator">Coordinator</Label>
+            <Input
+              id="event-coordinator"
+              placeholder="Lead coordinator"
+              value={form.coordinator}
+              onChange={(event) => setForm((prev) => ({ ...prev, coordinator: event.target.value }))}
+            />
           </div>
           <div className="grid gap-2 sm:grid-cols-2 sm:gap-4">
             <div className="grid gap-2">
@@ -373,26 +448,64 @@ export function EventForm({
               )}
               {vendors.map((vendor) => {
                 const inputId = `event-vendor-${vendor.id}`;
+                const costInputId = `${inputId}-cost`;
                 const isChecked = form.vendorIds.includes(vendor.id);
+                const vendorCostError = errors[`vendorCost-${vendor.id}`];
 
                 return (
-                  <label
+                  <div
                     key={vendor.id}
-                    htmlFor={inputId}
-                    className="flex cursor-pointer items-center justify-between gap-3 rounded-md border border-transparent px-2 py-1 text-sm hover:border-border"
+                    className="rounded-md border border-transparent bg-background/40 p-2 text-sm"
                   >
-                    <div className="flex flex-col">
-                      <span className="font-medium text-foreground">{vendor.name}</span>
-                      <span className="text-xs text-muted-foreground">{vendor.service}</span>
+                    <div className="flex items-start justify-between gap-3">
+                      <label htmlFor={inputId} className="flex flex-col">
+                        <span className="font-medium text-foreground">{vendor.name}</span>
+                        <span className="text-xs text-muted-foreground">{vendor.service}</span>
+                      </label>
+                      <input
+                        id={inputId}
+                        type="checkbox"
+                        checked={isChecked}
+                        onChange={() => toggleVendorId(vendor.id)}
+                        className="mt-1 h-4 w-4 shrink-0 rounded border border-input text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                      />
                     </div>
-                    <input
-                      id={inputId}
-                      type="checkbox"
-                      checked={isChecked}
-                      onChange={() => toggleVendorId(vendor.id)}
-                      className="h-4 w-4 rounded border border-input text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                    />
-                  </label>
+                    {isChecked && (
+                      <div className="mt-3 grid gap-1">
+                        <Label htmlFor={costInputId} className="text-xs font-medium text-muted-foreground">
+                          Event cost
+                        </Label>
+                        <Input
+                          id={costInputId}
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          placeholder="What are you spending with this vendor?"
+                          value={form.vendorCosts[vendor.id] ?? ""}
+                          onChange={(event) => {
+                            const value = event.target.value;
+                            setForm((prev) => {
+                              const nextVendorCosts = { ...prev.vendorCosts };
+                              if (value.trim()) {
+                                nextVendorCosts[vendor.id] = value;
+                              } else {
+                                delete nextVendorCosts[vendor.id];
+                              }
+
+                              return {
+                                ...prev,
+                                vendorCosts: nextVendorCosts,
+                              };
+                            });
+                          }}
+                          aria-invalid={Boolean(vendorCostError)}
+                        />
+                        {vendorCostError && (
+                          <p className="text-xs text-destructive">{vendorCostError}</p>
+                        )}
+                      </div>
+                    )}
+                  </div>
                 );
               })}
             </div>
