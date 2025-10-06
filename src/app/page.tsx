@@ -1,21 +1,6 @@
 "use client";
 
 import { type DragEvent, useMemo, useState } from "react";
-import {
-  ArrowUpRight,
-  CalendarDays,
-  Download,
-  Globe,
-  Link2,
-  Mail,
-  Phone,
-  Plus,
-  Search,
-  Sparkles,
-} from "lucide-react";
-import { format } from "date-fns";
-
-import { useMemo, useState } from "react";
 import type { LucideIcon } from "lucide-react";
 import { BarChart3, Globe, Mail, Phone, Plus, Search, ShoppingBag, Sparkles, Users } from "lucide-react";
 import { ClientForm } from "@/components/crm/client-form";
