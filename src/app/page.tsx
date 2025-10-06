@@ -1760,13 +1760,13 @@ export default function HomePage() {
                       ) : (
                         filteredVendors.map((vendor) => (
                           <div key={vendor.id} className="space-y-3 rounded-xl border border-border/80 bg-muted/40 p-4">
-                          <div className="flex flex-wrap items-center justify-between gap-3">
-                            <div>
-                              <h3 className="text-base font-semibold text-foreground">{vendor.name}</h3>
-                              <p className="text-xs text-muted-foreground">
-                                {vendor.service} · Costs tracked per event
-                              </p>
-                            </div>
+                            <div className="flex flex-wrap items-center justify-between gap-3">
+                              <div>
+                                <h3 className="text-base font-semibold text-foreground">{vendor.name}</h3>
+                                <p className="text-xs text-muted-foreground">
+                                  {vendor.service} · Costs tracked per event
+                                </p>
+                              </div>
                               <div className="flex flex-wrap items-center gap-2">
                                 {vendor.preferredContact ? (
                                   <Badge variant="neutral" className="capitalize">
@@ -1817,82 +1817,41 @@ export default function HomePage() {
                                 {vendor.phone && (
                                   <Button
                                     type="button"
+                                    variant="outline"
                                     size="sm"
-                                    variant="ghost"
-                                    onClick={() => setEditingVendorId(vendor.id)}
+                                    className="h-8 rounded-full px-3"
+                                    asChild
                                   >
-                                    Edit
+                                    <a href={`tel:${vendor.phone}`} className="inline-flex items-center gap-1.5">
+                                      <Phone className="h-4 w-4" /> Call
+                                    </a>
                                   </Button>
+                                )}
+                                {vendor.website && (
                                   <Button
                                     type="button"
+                                    variant="outline"
                                     size="sm"
-                                    variant="ghost"
-                                    className="text-destructive hover:text-destructive"
-                                    onClick={() => handleVendorDelete(vendor.id)}
+                                    className="h-8 rounded-full px-3"
+                                    asChild
                                   >
-                                    Delete
+                                    <a
+                                      href={vendor.website}
+                                      target="_blank"
+                                      rel="noreferrer"
+                                      className="inline-flex items-center gap-1.5"
+                                    >
+                                      <Globe className="h-4 w-4" /> Site
+                                    </a>
                                   </Button>
-                                </div>
+                                )}
                               </div>
-                              <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
-                                {vendor.email && <span>{vendor.email}</span>}
-                                {vendor.phone && <span>{vendor.phone}</span>}
-                                {vendor.website && <span>{vendor.website}</span>}
-                              </div>
-                              {(vendor.email || vendor.phone || vendor.website) && (
-                                <div className="flex flex-wrap items-center gap-2 text-xs">
-                                  {vendor.email && (
-                                    <Button
-                                      type="button"
-                                      variant="outline"
-                                      size="sm"
-                                      className="h-8 rounded-full px-3"
-                                      asChild
-                                    >
-                                      <a href={`mailto:${vendor.email}`} className="inline-flex items-center gap-1.5">
-                                        <Mail className="h-4 w-4" /> Email
-                                      </a>
-                                    </Button>
-                                  )}
-                                  {vendor.phone && (
-                                    <Button
-                                      type="button"
-                                      variant="outline"
-                                      size="sm"
-                                      className="h-8 rounded-full px-3"
-                                      asChild
-                                    >
-                                      <a href={`tel:${vendor.phone}`} className="inline-flex items-center gap-1.5">
-                                        <Phone className="h-4 w-4" /> Call
-                                      </a>
-                                    </Button>
-                                  )}
-                                  {vendor.website && (
-                                    <Button
-                                      type="button"
-                                      variant="outline"
-                                      size="sm"
-                                      className="h-8 rounded-full px-3"
-                                      asChild
-                                    >
-                                      <a
-                                        href={vendor.website}
-                                        target="_blank"
-                                        rel="noreferrer"
-                                        className="inline-flex items-center gap-1.5"
-                                      >
-                                        <Globe className="h-4 w-4" /> Site
-                                      </a>
-                                    </Button>
-                                  )}
-                                </div>
-                              )}
-                              {vendor.notes && (
-                                <p className="text-sm text-muted-foreground/90">{vendor.notes}</p>
-                              )}
-                            </div>
-                          );
-                        })
+                            )}
+                            {vendor.notes && (
+                              <p className="text-sm text-muted-foreground/90">{vendor.notes}</p>
+                            )}
+                          </div>
+                        ))
                       )}
                     </CardContent>
                   </Card>
