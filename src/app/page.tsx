@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import type { DragEvent } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import type { ChangeEvent, ClipboardEvent, DragEvent, KeyboardEvent } from "react";
 import { Apple, Globe, Mail, Phone, Search, Sparkles } from "lucide-react";
 import { ClientForm } from "@/components/crm/client-form";
 import { EventForm } from "@/components/crm/event-form";
@@ -110,6 +110,7 @@ export default function HomePage() {
   const [importSummary, setImportSummary] = useState<string | null>(null);
   const [importError, setImportError] = useState<string | null>(null);
   const [, setDropzoneDepth] = useState(0);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const editingClient = useMemo(
     () => (editingClientId ? data.clients.find((client) => client.id === editingClientId) ?? null : null),
@@ -287,6 +288,59 @@ export default function HomePage() {
       reader.readAsText(file);
     });
 
+  const processImportPayload = async (files: File[], plainText: string) => {
+    try {
+      setImportSummary(null);
+      setImportError(null);
+
+      const textFragments: string[] = [];
+
+      if (plainText) {
+        textFragments.push(plainText);
+      }
+
+      for (const file of files) {
+        if (file.type.startsWith("text/") || /\.(txt|csv)$/i.test(file.name)) {
+          const content = await readFileAsText(file);
+          if (content) {
+            textFragments.push(content);
+          }
+        } else {
+          setImportError("Only text drops or .txt/.csv files are supported.");
+          return;
+        }
+      }
+
+      const combined = textFragments.join("\n");
+      if (!combined.trim()) {
+        setImportError("Drop text snippets or text files to import clients.");
+        return;
+      }
+
+      const { created, skipped } = parseClientsFromText(combined);
+
+      if (created.length === 0) {
+        setImportError("No recognizable client rows were found in that drop.");
+        return;
+      }
+
+      created.forEach((client) => addClient(client));
+
+      const summary: string[] = [];
+      summary.push(`Added ${created.length} client${created.length === 1 ? "" : "s"}.`);
+      if (skipped.length > 0) {
+        summary.push(`Skipped ${skipped.length} line${skipped.length === 1 ? "" : "s"} that we couldn't parse.`);
+      }
+      setImportSummary(summary.join(" "));
+      if (skipped.length > 0) {
+        setImportError("Some lines were skipped. Confirm they follow the Name | Email | Phone | Status pattern.");
+      }
+    } catch (error) {
+      console.error("Failed to import dropped text", error);
+      setImportError("We couldn't process that drop. Please try again with a text snippet or .txt file.");
+    }
+  };
+
   const handleImportDrop = (event: DragEvent<HTMLDivElement>) => {
     if (isClientDrag(event)) return;
     event.preventDefault();
@@ -296,59 +350,9 @@ export default function HomePage() {
 
     const dataTransfer = event.dataTransfer;
     const files = Array.from(dataTransfer?.files ?? []);
-    const textFragments: string[] = [];
+    const plainText = dataTransfer?.getData("text/plain") ?? "";
 
-    void (async () => {
-      try {
-        setImportSummary(null);
-        setImportError(null);
-
-        for (const file of files) {
-          if (file.type.startsWith("text/") || /\.(txt|csv)$/i.test(file.name)) {
-            const content = await readFileAsText(file);
-            if (content) {
-              textFragments.push(content);
-            }
-          } else {
-            setImportError("Only text drops or .txt/.csv files are supported.");
-            return;
-          }
-        }
-
-        const plainText = dataTransfer?.getData("text/plain") ?? "";
-        if (plainText) {
-          textFragments.push(plainText);
-        }
-
-        const combined = textFragments.join("\n");
-        if (!combined.trim()) {
-          setImportError("Drop text snippets or text files to import clients.");
-          return;
-        }
-
-        const { created, skipped } = parseClientsFromText(combined);
-
-        if (created.length === 0) {
-          setImportError("No recognizable client rows were found in that drop.");
-          return;
-        }
-
-        created.forEach((client) => addClient(client));
-
-        const summary: string[] = [];
-        summary.push(`Added ${created.length} client${created.length === 1 ? "" : "s"}.`);
-        if (skipped.length > 0) {
-          summary.push(`Skipped ${skipped.length} line${skipped.length === 1 ? "" : "s"} that we couldn't parse.`);
-        }
-        setImportSummary(summary.join(" "));
-        if (skipped.length > 0) {
-          setImportError("Some lines were skipped. Confirm they follow the Name | Email | Phone | Status pattern.");
-        }
-      } catch (error) {
-        console.error("Failed to import dropped text", error);
-        setImportError("We couldn't process that drop. Please try again with a text snippet or .txt file.");
-      }
-    })();
+    void processImportPayload(files, plainText);
   };
 
   const handleImportDragOver = (event: DragEvent<HTMLDivElement>) => {
@@ -377,6 +381,48 @@ export default function HomePage() {
       }
       return next;
     });
+  };
+
+  const handleImportFileChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const fileList = event.target.files;
+    const files = fileList ? Array.from(fileList) : [];
+    if (files.length === 0) {
+      event.target.value = "";
+      return;
+    }
+
+    void processImportPayload(files, "");
+    event.target.value = "";
+  };
+
+  const handleImportPaste = (event: ClipboardEvent<HTMLDivElement>) => {
+    const clipboard = event.clipboardData;
+    if (!clipboard) return;
+
+    const text = clipboard.getData("text/plain") || clipboard.getData("text") || "";
+    const files = Array.from(clipboard.files ?? []);
+
+    if (!text && files.length === 0) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+
+    void processImportPayload(files, text);
+  };
+
+  const handleImportZoneClick = () => {
+    setImportError(null);
+    setImportSummary(null);
+    fileInputRef.current?.click();
+  };
+
+  const handleImportZoneKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      handleImportZoneClick();
+    }
   };
 
   const handleVendorSubmit = (values: Omit<Vendor, "id">, id?: string) => {
@@ -793,19 +839,33 @@ export default function HomePage() {
                       "flex flex-col items-center justify-center gap-2 rounded-2xl border border-dashed border-border/60 bg-muted/30 p-6 text-center text-xs text-muted-foreground transition",
                       isImportDragActive && "border-primary/60 bg-primary/5 text-primary"
                     )}
+                    role="button"
+                    tabIndex={0}
+                    aria-label="Import clients by pasting, dropping, or uploading text files"
+                    onClick={handleImportZoneClick}
+                    onKeyDown={handleImportZoneKeyDown}
+                    onPaste={handleImportPaste}
                     onDragEnter={handleImportDragEnter}
                     onDragLeave={handleImportDragLeave}
                     onDragOver={handleImportDragOver}
                     onDrop={handleImportDrop}
                   >
-                    <p className="text-sm font-medium text-foreground">Drop text to add clients</p>
+                    <p className="text-sm font-medium text-foreground">Click or drop text to add clients</p>
                     <p className="max-w-md">
-                      Paste or drop lines formatted like
+                      Paste, drop, or upload lines formatted like
                       <span className="mx-1 rounded bg-background px-1 py-0.5 font-mono text-[11px] text-foreground">
                         Name | Email | Phone | Status | Event Date | Budget | Notes
                       </span>
-                      or upload a .txt/.csv file.
+                      or choose a .txt/.csv file.
                     </p>
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept=".txt,.csv,text/plain"
+                      multiple
+                      className="sr-only"
+                      onChange={handleImportFileChange}
+                    />
                   </div>
                   {(importSummary || importError) && (
                     <div className="space-y-1 text-xs">
