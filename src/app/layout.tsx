@@ -20,6 +20,12 @@ export const metadata: Metadata = {
   title: "aacrm | lightweight event CRM",
   description:
     "aacrm is a modern, mobile-first client and vendor CRM for boutique event and wedding teams.",
+  icons: {
+    icon: [
+      { url: "/favicon.svg", sizes: "any", type: "image/svg+xml" },
+      { url: "/favicon.ico" },
+    ],
+  },
 };
 
 export default function RootLayout({

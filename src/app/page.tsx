@@ -531,6 +531,24 @@ export default function HomePage() {
     setSelectedClientIds([]);
   };
 
+  const deleteSelectedClients = () => {
+    if (selectedClientIds.length === 0) return;
+    if (!confirmRemoval(`Delete ${selectedClientIds.length} selected client${selectedClientIds.length === 1 ? '' : 's'}? This cannot be undone.`)) return;
+    selectedClientIds.forEach((id) => deleteClient(id));
+    setSelectedClientIds([]);
+  };
+
+  const duplicateSelectedClients = () => {
+    if (selectedClientIds.length === 0) return;
+    const clones = selectedClientIds
+      .map((id) => data.clients.find((c) => c.id === id))
+      .filter((c): c is Client => Boolean(c))
+      .map(({ id: _id, ...rest }) => ({ ...rest } as Omit<Client, 'id'>));
+    clones.forEach((clone) => addClient(clone));
+    // Keep selection cleared after duplication
+    setSelectedClientIds([]);
+  };
+
   const selectAllEvents = () => {
     setSelectedEventIds(data.events.map((event) => event.id));
   };
@@ -539,11 +557,45 @@ export default function HomePage() {
     setSelectedEventIds([]);
   };
 
+  const deleteSelectedEvents = () => {
+    if (selectedEventIds.length === 0) return;
+    if (!confirmRemoval(`Delete ${selectedEventIds.length} selected event${selectedEventIds.length === 1 ? '' : 's'}? This cannot be undone.`)) return;
+    selectedEventIds.forEach((id) => deleteEvent(id));
+    setSelectedEventIds([]);
+  };
+
+  const duplicateSelectedEvents = () => {
+    if (selectedEventIds.length === 0) return;
+    const clones = selectedEventIds
+      .map((id) => data.events.find((e) => e.id === id))
+      .filter((e): e is EventRecord => Boolean(e))
+      .map(({ id: _id, ...rest }) => ({ ...rest } as Omit<EventRecord, 'id'>));
+    clones.forEach((clone) => addEvent(clone));
+    setSelectedEventIds([]);
+  };
+
   const selectAllVendors = () => {
     setSelectedVendorIds(filteredVendors.map((vendor) => vendor.id));
   };
 
   const clearVendorSelection = () => {
+    setSelectedVendorIds([]);
+  };
+
+  const deleteSelectedVendors = () => {
+    if (selectedVendorIds.length === 0) return;
+    if (!confirmRemoval(`Delete ${selectedVendorIds.length} selected vendor${selectedVendorIds.length === 1 ? '' : 's'}? This cannot be undone.`)) return;
+    selectedVendorIds.forEach((id) => deleteVendor(id));
+    setSelectedVendorIds([]);
+  };
+
+  const duplicateSelectedVendors = () => {
+    if (selectedVendorIds.length === 0) return;
+    const clones = selectedVendorIds
+      .map((id) => data.vendors.find((v) => v.id === id))
+      .filter((v): v is Vendor => Boolean(v))
+      .map(({ id: _id, ...rest }) => ({ ...rest } as Omit<Vendor, 'id'>));
+    clones.forEach((clone) => addVendor(clone));
     setSelectedVendorIds([]);
   };
 
@@ -1443,6 +1495,25 @@ export default function HomePage() {
                             type="button"
                             size="sm"
                             variant="ghost"
+                            className="text-destructive hover:text-destructive"
+                            onClick={deleteSelectedClients}
+                            disabled={selectedClientIds.length === 0}
+                          >
+                            Delete selected
+                          </Button>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="ghost"
+                            onClick={duplicateSelectedClients}
+                            disabled={selectedClientIds.length === 0}
+                          >
+                            Duplicate
+                          </Button>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="ghost"
                             onClick={clearClientSelection}
                             disabled={selectedClientIds.length === 0}
                           >
@@ -1550,6 +1621,25 @@ export default function HomePage() {
                             disabled={data.events.length === 0 || selectedEventIds.length === data.events.length}
                           >
                             Select all
+                          </Button>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="ghost"
+                            className="text-destructive hover:text-destructive"
+                            onClick={deleteSelectedEvents}
+                            disabled={selectedEventIds.length === 0}
+                          >
+                            Delete selected
+                          </Button>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="ghost"
+                            onClick={duplicateSelectedEvents}
+                            disabled={selectedEventIds.length === 0}
+                          >
+                            Duplicate
                           </Button>
                           <Button
                             type="button"
@@ -1692,6 +1782,25 @@ export default function HomePage() {
                             type="button"
                             size="sm"
                             variant="ghost"
+                            className="text-destructive hover:text-destructive"
+                            onClick={deleteSelectedVendors}
+                            disabled={selectedVendorIds.length === 0}
+                          >
+                            Delete selected
+                          </Button>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="ghost"
+                            onClick={duplicateSelectedVendors}
+                            disabled={selectedVendorIds.length === 0}
+                          >
+                            Duplicate
+                          </Button>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="ghost"
                             onClick={clearVendorSelection}
                             disabled={selectedVendorIds.length === 0}
                           >
@@ -1735,7 +1844,7 @@ export default function HomePage() {
                               onClick={() => setVendorServiceFilter(service)}
                               className={cn(
                                 "flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-medium transition",
-                                vendorServiceFilter.toLowerCase() === service.toLowerCase()
+                                vendorServiceFilter === service.toLowerCase()
                                   ? "border-primary/40 bg-primary/10 text-primary"
                                   : "border-border/60 bg-muted/40 text-muted-foreground hover:border-border/80 hover:text-foreground"
                               )}
