@@ -104,7 +104,7 @@ export function EventForm({
       setForm(createDefaultForm());
       setErrors({});
     }
-  }, [mode, initialEvent?.id]);
+  }, [mode, initialEvent]);
 
   const knownClientIds = useMemo(() => new Set(clients.map((client) => client.id)), [clients]);
   const knownVendorIds = useMemo(() => new Set(vendors.map((vendor) => vendor.id)), [vendors]);

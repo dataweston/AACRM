@@ -59,7 +59,7 @@ export function ClientForm({
       setForm(createDefaultForm());
       setErrors({});
     }
-  }, [mode, initialClient?.id]);
+  }, [mode, initialClient]);
 
   const validate = () => {
     const nextErrors: Record<string, string> = {};
