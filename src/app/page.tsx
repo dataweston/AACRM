@@ -17,8 +17,10 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Textarea } from "@/components/ui/textarea";
 import { useCrmData } from "@/hooks/use-crm-data";
 import { formatCurrency, formatDate } from "@/lib/format";
 import type { Client, Event as EventRecord, Invoice, Vendor } from "@/types/crm";
@@ -58,6 +60,41 @@ const preferredContactLabels: Record<NonNullable<Vendor["preferredContact"]>, st
   text: "Text",
 };
 
+type ImportPreviewState = {
+  created: Omit<Client, "id">[];
+  skipped: string[];
+  sources: string[];
+};
+
+const detectUnsupportedFormat = (input: string): string | null => {
+  const sample = input.trim();
+  if (!sample) {
+    return null;
+  }
+
+  if (/^\s*<\?xml/i.test(sample)) {
+    return "XML data";
+  }
+
+  if (/<\/?[a-z][^>]*>/i.test(sample)) {
+    return "HTML markup";
+  }
+
+  if (/BEGIN:VCARD/i.test(sample)) {
+    return "a vCard contact file";
+  }
+
+  if (/^\s*[\[{]/.test(sample) && /[:{}\[\],]/.test(sample)) {
+    return "JSON data";
+  }
+
+  if (/\bSELECT\b.+\bFROM\b/i.test(sample)) {
+    return "a database export";
+  }
+
+  return null;
+};
+
 export default function HomePage() {
   const {
     data,
@@ -82,6 +119,9 @@ export default function HomePage() {
   const [editingVendorId, setEditingVendorId] = useState<string | null>(null);
   const [editingEventId, setEditingEventId] = useState<string | null>(null);
   const [editingInvoiceId, setEditingInvoiceId] = useState<string | null>(null);
+  const [selectedClientIds, setSelectedClientIds] = useState<string[]>([]);
+  const [selectedEventIds, setSelectedEventIds] = useState<string[]>([]);
+  const [selectedVendorIds, setSelectedVendorIds] = useState<string[]>([]);
   const [isOffline, setIsOffline] = useState(false);
   const { session, status, signInWithApple, signOut } = useAuth();
   const [appleName, setAppleName] = useState("");
@@ -109,8 +149,39 @@ export default function HomePage() {
   const [isImportDragActive, setIsImportDragActive] = useState(false);
   const [importSummary, setImportSummary] = useState<string | null>(null);
   const [importError, setImportError] = useState<string | null>(null);
+  const [importPreview, setImportPreview] = useState<ImportPreviewState | null>(null);
+  const [importPreviewText, setImportPreviewText] = useState("");
   const [, setDropzoneDepth] = useState(0);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  const resetImportPreview = () => {
+    setImportPreview(null);
+    setImportPreviewText("");
+  };
+
+  const updateImportFeedback = (createdCount: number, skippedCount: number) => {
+    if (createdCount === 0 && skippedCount === 0) {
+      setImportError("We didn't find any data rows. Adjust the preview text to match the Name | Email | Phone | Status pattern.");
+      return;
+    }
+
+    if (createdCount === 0) {
+      setImportError("We couldn't identify any client rows. Adjust the preview text or cancel the import.");
+      return;
+    }
+
+    if (skippedCount > 0) {
+      const ratio = skippedCount / (createdCount + skippedCount);
+      setImportError(
+        ratio >= 0.5
+          ? "More than half of the lines didn't match. Review the preview and remove unrelated content before importing."
+          : "Some lines were skipped. Confirm they follow the Name | Email | Phone | Status pattern."
+      );
+      return;
+    }
+
+    setImportError(null);
+  };
 
   const editingClient = useMemo(
     () => (editingClientId ? data.clients.find((client) => client.id === editingClientId) ?? null : null),
@@ -128,6 +199,20 @@ export default function HomePage() {
     () => (editingInvoiceId ? data.invoices.find((invoice) => invoice.id === editingInvoiceId) ?? null : null),
     [data.invoices, editingInvoiceId]
   );
+
+  useEffect(() => {
+    setSelectedClientIds((current) =>
+      current.filter((id) => data.clients.some((client) => client.id === id))
+    );
+  }, [data.clients]);
+
+  useEffect(() => {
+    setSelectedEventIds((current) => current.filter((id) => data.events.some((event) => event.id === id)));
+  }, [data.events]);
+
+  useEffect(() => {
+    setSelectedVendorIds((current) => current.filter((id) => data.vendors.some((vendor) => vendor.id === id)));
+  }, [data.vendors]);
 
   const confirmRemoval = (message: string) =>
     typeof window === "undefined" ? true : window.confirm(message);
@@ -147,6 +232,7 @@ export default function HomePage() {
     }
     deleteClient(id);
     setEditingClientId((current) => (current === id ? null : current));
+    setSelectedClientIds((current) => current.filter((clientId) => clientId !== id));
   };
 
   const handleEventEditRequest = (eventId: string) => {
@@ -292,20 +378,24 @@ export default function HomePage() {
     try {
       setImportSummary(null);
       setImportError(null);
-
+      resetImportPreview();
       const textFragments: string[] = [];
+      const sources: string[] = [];
 
-      if (plainText) {
+      if (plainText.trim()) {
         textFragments.push(plainText);
+        sources.push("pasted text");
       }
 
       for (const file of files) {
         if (file.type.startsWith("text/") || /\.(txt|csv)$/i.test(file.name)) {
+          sources.push(file.name);
           const content = await readFileAsText(file);
           if (content) {
             textFragments.push(content);
           }
         } else {
+          resetImportPreview();
           setImportError("Only text drops or .txt/.csv files are supported.");
           return;
         }
@@ -313,32 +403,112 @@ export default function HomePage() {
 
       const combined = textFragments.join("\n");
       if (!combined.trim()) {
+        resetImportPreview();
         setImportError("Drop text snippets or text files to import clients.");
+        return;
+      }
+
+      const unsupported = detectUnsupportedFormat(combined);
+      if (unsupported) {
+        resetImportPreview();
+        setImportError(`This drop looks like ${unsupported}. Please provide plain text rows or a CSV export.`);
         return;
       }
 
       const { created, skipped } = parseClientsFromText(combined);
 
-      if (created.length === 0) {
-        setImportError("No recognizable client rows were found in that drop.");
-        return;
-      }
-
-      created.forEach((client) => addClient(client));
-
-      const summary: string[] = [];
-      summary.push(`Added ${created.length} client${created.length === 1 ? "" : "s"}.`);
-      if (skipped.length > 0) {
-        summary.push(`Skipped ${skipped.length} line${skipped.length === 1 ? "" : "s"} that we couldn't parse.`);
-      }
-      setImportSummary(summary.join(" "));
-      if (skipped.length > 0) {
-        setImportError("Some lines were skipped. Confirm they follow the Name | Email | Phone | Status pattern.");
-      }
+      setImportPreview({ created, skipped, sources });
+      setImportPreviewText(combined);
+      updateImportFeedback(created.length, skipped.length);
     } catch (error) {
       console.error("Failed to import dropped text", error);
       setImportError("We couldn't process that drop. Please try again with a text snippet or .txt file.");
+      resetImportPreview();
     }
+  };
+
+  const handleImportPreviewConfirm = () => {
+    if (!importPreview || importPreview.created.length === 0) {
+      updateImportFeedback(importPreview?.created.length ?? 0, importPreview?.skipped.length ?? 0);
+      return;
+    }
+
+    importPreview.created.forEach((client) => addClient(client));
+
+    const summary: string[] = [];
+    summary.push(`Added ${importPreview.created.length} client${importPreview.created.length === 1 ? "" : "s"}.`);
+    if (importPreview.skipped.length > 0) {
+      summary.push(
+        `Skipped ${importPreview.skipped.length} line${importPreview.skipped.length === 1 ? "" : "s"} that we couldn't parse.`
+      );
+      setImportError("Some lines were skipped. Confirm they follow the Name | Email | Phone | Status pattern.");
+    } else {
+      setImportError(null);
+    }
+
+    setImportSummary(summary.join(" "));
+    resetImportPreview();
+  };
+
+  const handleImportPreviewCancel = () => {
+    resetImportPreview();
+    setImportError(null);
+  };
+
+  const handleImportPreviewTextChange = (value: string) => {
+    setImportPreviewText(value);
+
+    if (!value.trim()) {
+      setImportPreview((current) => (current ? { ...current, created: [], skipped: [] } : current));
+      updateImportFeedback(0, 0);
+      return;
+    }
+
+    const { created, skipped } = parseClientsFromText(value);
+    setImportPreview((current) => (current ? { ...current, created, skipped } : current));
+    updateImportFeedback(created.length, skipped.length);
+  };
+
+  const toggleClientSelection = (id: string) => {
+    setSelectedClientIds((current) =>
+      current.includes(id) ? current.filter((clientId) => clientId !== id) : [...current, id]
+    );
+  };
+
+  const selectAllClients = () => {
+    setSelectedClientIds(data.clients.map((client) => client.id));
+  };
+
+  const clearClientSelection = () => {
+    setSelectedClientIds([]);
+  };
+
+  const toggleEventSelection = (id: string) => {
+    setSelectedEventIds((current) =>
+      current.includes(id) ? current.filter((eventId) => eventId !== id) : [...current, id]
+    );
+  };
+
+  const selectAllEvents = () => {
+    setSelectedEventIds(data.events.map((event) => event.id));
+  };
+
+  const clearEventSelection = () => {
+    setSelectedEventIds([]);
+  };
+
+  const toggleVendorSelection = (id: string) => {
+    setSelectedVendorIds((current) =>
+      current.includes(id) ? current.filter((vendorId) => vendorId !== id) : [...current, id]
+    );
+  };
+
+  const selectAllVendors = () => {
+    setSelectedVendorIds(filteredVendors.map((vendor) => vendor.id));
+  };
+
+  const clearVendorSelection = () => {
+    setSelectedVendorIds([]);
   };
 
   const handleImportDrop = (event: DragEvent<HTMLDivElement>) => {
@@ -415,6 +585,7 @@ export default function HomePage() {
   const handleImportZoneClick = () => {
     setImportError(null);
     setImportSummary(null);
+    resetImportPreview();
     fileInputRef.current?.click();
   };
 
@@ -440,6 +611,7 @@ export default function HomePage() {
     }
     deleteVendor(id);
     setEditingVendorId((current) => (current === id ? null : current));
+    setSelectedVendorIds((current) => current.filter((vendorId) => vendorId !== id));
   };
 
   const handleEventSubmit = (values: Omit<EventRecord, "id">, id?: string) => {
@@ -457,6 +629,7 @@ export default function HomePage() {
     }
     deleteEvent(id);
     setEditingEventId((current) => (current === id ? null : current));
+    setSelectedEventIds((current) => current.filter((eventId) => eventId !== id));
   };
 
   const handleInvoiceSubmit = (values: Omit<Invoice, "id">, id?: string) => {
@@ -572,6 +745,17 @@ export default function HomePage() {
       return haystack.includes(searchValue);
     });
   }, [data.vendors, vendorSearch, vendorServiceFilter]);
+
+  useEffect(() => {
+    setSelectedVendorIds((current) =>
+      current.filter((id) => filteredVendors.some((vendor) => vendor.id === id))
+    );
+  }, [filteredVendors]);
+
+  const selectedVisibleVendorCount = useMemo(
+    () => selectedVendorIds.filter((id) => filteredVendors.some((vendor) => vendor.id === id)).length,
+    [filteredVendors, selectedVendorIds]
+  );
 
   const hasVendorFilters = useMemo(
     () => vendorServiceFilter !== "all" || vendorSearch.trim().length > 0,
@@ -867,6 +1051,102 @@ export default function HomePage() {
                       onChange={handleImportFileChange}
                     />
                   </div>
+                  {importPreview && (
+                    <div className="w-full space-y-4 rounded-2xl border border-border/70 bg-muted/20 p-4 text-left">
+                      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                        <div className="space-y-1">
+                          <h3 className="text-sm font-semibold text-foreground">Preview detected clients</h3>
+                          <p className="text-xs text-muted-foreground">
+                            {importPreview.created.length > 0
+                              ? `Ready to add ${importPreview.created.length} client${
+                                  importPreview.created.length === 1 ? "" : "s"
+                                }.`
+                              : "We couldn't identify any client rows yet. Adjust the text below or cancel the import."}
+                            {importPreview.sources.length > 0 && (
+                              <span> Source: {importPreview.sources.join(", ")}</span>
+                            )}
+                          </p>
+                          {importPreview.skipped.length > 0 && (
+                            <p className="text-xs text-muted-foreground">
+                              Skipped {importPreview.skipped.length} line{importPreview.skipped.length === 1 ? "" : "s"}. Review or edit them below before importing.
+                            </p>
+                          )}
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          <Button type="button" size="sm" variant="ghost" onClick={handleImportPreviewCancel}>
+                            Cancel
+                          </Button>
+                          <Button
+                            type="button"
+                            size="sm"
+                            onClick={handleImportPreviewConfirm}
+                            disabled={importPreview.created.length === 0}
+                          >
+                            Import clients
+                          </Button>
+                        </div>
+                      </div>
+                      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)]">
+                        <div className="space-y-3">
+                          <div className="space-y-2">
+                            <p className="text-xs font-medium text-muted-foreground">Preview sample</p>
+                            {importPreview.created.length === 0 ? (
+                              <p className="rounded-lg border border-dashed border-border/60 bg-background/60 p-3 text-[11px] text-muted-foreground">
+                                No importable rows detected yet.
+                              </p>
+                            ) : (
+                              <ul className="space-y-2 text-xs text-muted-foreground">
+                                {importPreview.created.slice(0, 5).map((client, index) => (
+                                  <li
+                                    key={`${client.name}-${client.email ?? "unknown"}-${index}`}
+                                    className="flex flex-col gap-1 rounded-lg border border-border/60 bg-background/60 p-3"
+                                  >
+                                    <span className="text-sm font-semibold text-foreground">{client.name}</span>
+                                    {client.email && <span>{client.email}</span>}
+                                    {client.phone && <span>{client.phone}</span>}
+                                  </li>
+                                ))}
+                              </ul>
+                            )}
+                            {importPreview.created.length > 5 && (
+                              <p className="text-[11px] text-muted-foreground">
+                                +{importPreview.created.length - 5} more client{importPreview.created.length - 5 === 1 ? "" : "s"} detected.
+                              </p>
+                            )}
+                          </div>
+                          {importPreview.skipped.length > 0 && (
+                            <div className="space-y-2 rounded-lg border border-dashed border-border/60 bg-background/60 p-3">
+                              <p className="text-xs font-medium text-foreground">Lines to review</p>
+                              <ul className="space-y-1 text-[11px] font-mono text-muted-foreground/80">
+                                {importPreview.skipped.slice(0, 4).map((line, index) => (
+                                  <li key={`skipped-${index}`} className="truncate">
+                                    {line}
+                                  </li>
+                                ))}
+                              </ul>
+                              {importPreview.skipped.length > 4 && (
+                                <p className="text-[11px] text-muted-foreground">
+                                  +{importPreview.skipped.length - 4} additional line{importPreview.skipped.length - 4 === 1 ? "" : "s"} skipped.
+                                </p>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="import-preview-text" className="text-xs font-medium text-muted-foreground">
+                            Adjust text before importing
+                          </Label>
+                          <Textarea
+                            id="import-preview-text"
+                            value={importPreviewText}
+                            onChange={(event) => handleImportPreviewTextChange(event.target.value)}
+                            className="min-h-[180px] font-mono text-xs"
+                          />
+                          <p className="text-[11px] text-muted-foreground">Changes update the preview automatically.</p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                   {(importSummary || importError) && (
                     <div className="space-y-1 text-xs">
                       {importSummary && <p className="text-foreground">{importSummary}</p>}
@@ -1035,56 +1315,101 @@ export default function HomePage() {
                     onDelete={handleClientDelete}
                   />
                   <Card className="bg-card/90">
-                    <CardHeader className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                    <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                       <div>
                         <CardTitle>Client roster</CardTitle>
                         <CardDescription>Recent activity and event context</CardDescription>
                       </div>
-                      <Badge variant="neutral">{data.clients.length} total</Badge>
+                      <div className="flex flex-col items-end gap-2">
+                        <Badge variant="neutral">{data.clients.length} total</Badge>
+                        <div className="flex flex-wrap justify-end gap-2">
+                          {selectedClientIds.length > 0 && (
+                            <Badge variant="outline" className="border-primary/40 text-primary">
+                              {selectedClientIds.length} selected
+                            </Badge>
+                          )}
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            onClick={selectAllClients}
+                            disabled={data.clients.length === 0 || selectedClientIds.length === data.clients.length}
+                          >
+                            Select all
+                          </Button>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="ghost"
+                            onClick={clearClientSelection}
+                            disabled={selectedClientIds.length === 0}
+                          >
+                            Clear
+                          </Button>
+                        </div>
+                      </div>
                     </CardHeader>
                     <CardContent className="space-y-3">
-                      {data.clients.map((client) => (
-                        <div key={client.id} className="space-y-3 rounded-xl border border-border/80 bg-muted/40 p-4">
-                          <div className="flex flex-wrap items-center justify-between gap-3">
-                            <div>
-                              <h3 className="text-base font-semibold text-foreground">{client.name}</h3>
-                              <p className="text-xs text-muted-foreground">{client.email}</p>
+                      {data.clients.map((client) => {
+                        const isSelected = selectedClientIds.includes(client.id);
+                        return (
+                          <div
+                            key={client.id}
+                            className={cn(
+                              "space-y-3 rounded-xl border border-border/80 bg-muted/40 p-4",
+                              isSelected && "border-primary/60 bg-primary/5"
+                            )}
+                          >
+                            <div className="flex flex-wrap items-start justify-between gap-3">
+                              <div className="flex items-start gap-3">
+                                <input
+                                  type="checkbox"
+                                  aria-label={`Select ${client.name}`}
+                                  checked={isSelected}
+                                  onChange={() => toggleClientSelection(client.id)}
+                                  className="mt-1 h-4 w-4 rounded border border-border text-primary accent-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 focus-visible:ring-offset-0"
+                                />
+                                <div>
+                                  <h3 className="text-base font-semibold text-foreground">{client.name}</h3>
+                                  <p className="text-xs text-muted-foreground">{client.email}</p>
+                                </div>
+                              </div>
+                              <div className="flex flex-wrap items-center gap-2">
+                                <Badge className="capitalize bg-primary/10 text-primary">
+                                  {clientStatusLabels[client.status]}
+                                </Badge>
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="ghost"
+                                  onClick={() => setEditingClientId(client.id)}
+                                >
+                                  Edit
+                                </Button>
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="ghost"
+                                  className="text-destructive hover:text-destructive"
+                                  onClick={() => handleClientDelete(client.id)}
+                                >
+                                  Delete
+                                </Button>
+                              </div>
                             </div>
-                            <div className="flex flex-wrap items-center gap-2">
-                              <Badge className="capitalize bg-primary/10 text-primary">
-                                {clientStatusLabels[client.status]}
-                              </Badge>
-                              <Button
-                                type="button"
-                                size="sm"
-                                variant="ghost"
-                                onClick={() => setEditingClientId(client.id)}
-                              >
-                                Edit
-                              </Button>
-                              <Button
-                                type="button"
-                                size="sm"
-                                variant="ghost"
-                                className="text-destructive hover:text-destructive"
-                                onClick={() => handleClientDelete(client.id)}
-                              >
-                                Delete
-                              </Button>
+                            <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+                              {client.phone && <span>{client.phone}</span>}
+                              {client.eventDate && <span>Event · {formatDate(client.eventDate)}</span>}
+                              {typeof client.budget === "number" && (
+                                <span>Budget · {formatCurrency(client.budget)}</span>
+                              )}
                             </div>
-                          </div>
-                          <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
-                            {client.phone && <span>{client.phone}</span>}
-                            {client.eventDate && <span>Event · {formatDate(client.eventDate)}</span>}
-                            {typeof client.budget === "number" && (
-                              <span>Budget · {formatCurrency(client.budget)}</span>
+                            {client.notes && (
+                              <p className="text-sm text-muted-foreground/90">{client.notes}</p>
                             )}
                           </div>
-                          {client.notes && (
-                            <p className="text-sm text-muted-foreground/90">{client.notes}</p>
-                          )}
-                        </div>
-                      ))}
+                        );
+                      })}
                     </CardContent>
                   </Card>
                 </section>
@@ -1102,12 +1427,39 @@ export default function HomePage() {
                     vendors={data.vendors}
                   />
                   <Card className="bg-card/90">
-                    <CardHeader className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                    <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                       <div>
                         <CardTitle>Production calendar</CardTitle>
                         <CardDescription>Keep venues, leads, and status aligned</CardDescription>
                       </div>
-                      <Badge variant="neutral">{data.events.length} events</Badge>
+                      <div className="flex flex-col items-end gap-2">
+                        <Badge variant="neutral">{data.events.length} events</Badge>
+                        <div className="flex flex-wrap justify-end gap-2">
+                          {selectedEventIds.length > 0 && (
+                            <Badge variant="outline" className="border-primary/40 text-primary">
+                              {selectedEventIds.length} selected
+                            </Badge>
+                          )}
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            onClick={selectAllEvents}
+                            disabled={data.events.length === 0 || selectedEventIds.length === data.events.length}
+                          >
+                            Select all
+                          </Button>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="ghost"
+                            onClick={clearEventSelection}
+                            disabled={selectedEventIds.length === 0}
+                          >
+                            Clear
+                          </Button>
+                        </div>
+                      </div>
                     </CardHeader>
                     <CardContent className="space-y-3">
                       {data.events.map((event) => {
@@ -1115,14 +1467,30 @@ export default function HomePage() {
                         const assignedVendors = (event.vendorIds ?? [])
                           .map((vendorId) => vendorMap.get(vendorId) ?? null)
                           .filter((vendor): vendor is Vendor => Boolean(vendor));
+                        const isSelected = selectedEventIds.includes(event.id);
                         return (
-                          <div key={event.id} className="space-y-2 rounded-xl border border-border/80 bg-muted/40 p-4">
-                            <div className="flex flex-wrap items-center justify-between gap-3">
-                              <div>
-                                <h3 className="text-base font-semibold text-foreground">{event.name}</h3>
-                                <p className="text-xs text-muted-foreground">
-                                  {formatDate(event.date)} · {event.venue}
-                                </p>
+                          <div
+                            key={event.id}
+                            className={cn(
+                              "space-y-2 rounded-xl border border-border/80 bg-muted/40 p-4",
+                              isSelected && "border-primary/60 bg-primary/5"
+                            )}
+                          >
+                            <div className="flex flex-wrap items-start justify-between gap-3">
+                              <div className="flex items-start gap-3">
+                                <input
+                                  type="checkbox"
+                                  aria-label={`Select ${event.name}`}
+                                  checked={isSelected}
+                                  onChange={() => toggleEventSelection(event.id)}
+                                  className="mt-1 h-4 w-4 rounded border border-border text-primary accent-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 focus-visible:ring-offset-0"
+                                />
+                                <div>
+                                  <h3 className="text-base font-semibold text-foreground">{event.name}</h3>
+                                  <p className="text-xs text-muted-foreground">
+                                    {formatDate(event.date)} · {event.venue}
+                                  </p>
+                                </div>
                               </div>
                               <div className="flex flex-wrap items-center gap-2">
                                 <Badge variant="neutral" className="capitalize">
@@ -1187,14 +1555,41 @@ export default function HomePage() {
                     onDelete={handleVendorDelete}
                   />
                   <Card className="bg-card/90">
-                    <CardHeader className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                    <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                       <div>
                         <CardTitle>Vendor roster</CardTitle>
                         <CardDescription>Trusted partners and sourcing notes</CardDescription>
                       </div>
-                      <Badge variant="neutral">
-                        {filteredVendors.length} of {data.vendors.length} vendors
-                      </Badge>
+                      <div className="flex flex-col items-end gap-2">
+                        <Badge variant="neutral">
+                          {filteredVendors.length} of {data.vendors.length} vendors
+                        </Badge>
+                        <div className="flex flex-wrap justify-end gap-2">
+                          {selectedVisibleVendorCount > 0 && (
+                            <Badge variant="outline" className="border-primary/40 text-primary">
+                              {selectedVisibleVendorCount} selected
+                            </Badge>
+                          )}
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            onClick={selectAllVendors}
+                            disabled={filteredVendors.length === 0 || selectedVisibleVendorCount === filteredVendors.length}
+                          >
+                            Select visible
+                          </Button>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="ghost"
+                            onClick={clearVendorSelection}
+                            disabled={selectedVendorIds.length === 0}
+                          >
+                            Clear
+                          </Button>
+                        </div>
+                      </div>
                     </CardHeader>
                     <CardContent className="space-y-4">
                       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -1256,98 +1651,116 @@ export default function HomePage() {
                             : "Add your first vendor to start building your partner roster."}
                         </p>
                       ) : (
-                        filteredVendors.map((vendor) => (
-                          <div key={vendor.id} className="space-y-3 rounded-xl border border-border/80 bg-muted/40 p-4">
-                            <div className="flex flex-wrap items-center justify-between gap-3">
-                              <div>
-                                <h3 className="text-base font-semibold text-foreground">{vendor.name}</h3>
-                                <p className="text-xs text-muted-foreground">{vendor.service}</p>
-                              </div>
-                              <div className="flex flex-wrap items-center gap-2">
-                                {vendor.preferredContact ? (
-                                  <Badge variant="neutral" className="capitalize">
-                                    Prefers {preferredContactLabels[vendor.preferredContact]}
-                                  </Badge>
-                                ) : (
-                                  <Badge variant="neutral">Flexible contact</Badge>
-                                )}
-                                <Button
-                                  type="button"
-                                  size="sm"
-                                  variant="ghost"
-                                  onClick={() => setEditingVendorId(vendor.id)}
-                                >
-                                  Edit
-                                </Button>
-                                <Button
-                                  type="button"
-                                  size="sm"
-                                  variant="ghost"
-                                  className="text-destructive hover:text-destructive"
-                                  onClick={() => handleVendorDelete(vendor.id)}
-                                >
-                                  Delete
-                                </Button>
-                              </div>
-                            </div>
-                            <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
-                              {vendor.email && <span>{vendor.email}</span>}
-                              {vendor.phone && <span>{vendor.phone}</span>}
-                              {vendor.website && <span>{vendor.website}</span>}
-                            </div>
-                            {(vendor.email || vendor.phone || vendor.website) && (
-                              <div className="flex flex-wrap items-center gap-2 text-xs">
-                                {vendor.email && (
+                        filteredVendors.map((vendor) => {
+                          const isSelected = selectedVendorIds.includes(vendor.id);
+                          return (
+                            <div
+                              key={vendor.id}
+                              className={cn(
+                                "space-y-3 rounded-xl border border-border/80 bg-muted/40 p-4",
+                                isSelected && "border-primary/60 bg-primary/5"
+                              )}
+                            >
+                              <div className="flex flex-wrap items-start justify-between gap-3">
+                                <div className="flex items-start gap-3">
+                                  <input
+                                    type="checkbox"
+                                    aria-label={`Select ${vendor.name}`}
+                                    checked={isSelected}
+                                    onChange={() => toggleVendorSelection(vendor.id)}
+                                    className="mt-1 h-4 w-4 rounded border border-border text-primary accent-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 focus-visible:ring-offset-0"
+                                  />
+                                  <div>
+                                    <h3 className="text-base font-semibold text-foreground">{vendor.name}</h3>
+                                    <p className="text-xs text-muted-foreground">{vendor.service}</p>
+                                  </div>
+                                </div>
+                                <div className="flex flex-wrap items-center gap-2">
+                                  {vendor.preferredContact ? (
+                                    <Badge variant="neutral" className="capitalize">
+                                      Prefers {preferredContactLabels[vendor.preferredContact]}
+                                    </Badge>
+                                  ) : (
+                                    <Badge variant="neutral">Flexible contact</Badge>
+                                  )}
                                   <Button
                                     type="button"
-                                    variant="outline"
                                     size="sm"
-                                    className="h-8 rounded-full px-3"
-                                    asChild
+                                    variant="ghost"
+                                    onClick={() => setEditingVendorId(vendor.id)}
                                   >
-                                    <a href={`mailto:${vendor.email}`} className="inline-flex items-center gap-1.5">
-                                      <Mail className="h-4 w-4" /> Email
-                                    </a>
+                                    Edit
                                   </Button>
-                                )}
-                                {vendor.phone && (
                                   <Button
                                     type="button"
-                                    variant="outline"
                                     size="sm"
-                                    className="h-8 rounded-full px-3"
-                                    asChild
+                                    variant="ghost"
+                                    className="text-destructive hover:text-destructive"
+                                    onClick={() => handleVendorDelete(vendor.id)}
                                   >
-                                    <a href={`tel:${vendor.phone}`} className="inline-flex items-center gap-1.5">
-                                      <Phone className="h-4 w-4" /> Call
-                                    </a>
+                                    Delete
                                   </Button>
-                                )}
-                                {vendor.website && (
-                                  <Button
-                                    type="button"
-                                    variant="outline"
-                                    size="sm"
-                                    className="h-8 rounded-full px-3"
-                                    asChild
-                                  >
-                                    <a
-                                      href={vendor.website}
-                                      target="_blank"
-                                      rel="noreferrer"
-                                      className="inline-flex items-center gap-1.5"
+                                </div>
+                              </div>
+                              <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+                                {vendor.email && <span>{vendor.email}</span>}
+                                {vendor.phone && <span>{vendor.phone}</span>}
+                                {vendor.website && <span>{vendor.website}</span>}
+                              </div>
+                              {(vendor.email || vendor.phone || vendor.website) && (
+                                <div className="flex flex-wrap items-center gap-2 text-xs">
+                                  {vendor.email && (
+                                    <Button
+                                      type="button"
+                                      variant="outline"
+                                      size="sm"
+                                      className="h-8 rounded-full px-3"
+                                      asChild
                                     >
-                                      <Globe className="h-4 w-4" /> Site
-                                    </a>
-                                  </Button>
-                                )}
-                              </div>
-                            )}
-                            {vendor.notes && (
-                              <p className="text-sm text-muted-foreground/90">{vendor.notes}</p>
-                            )}
-                          </div>
-                        ))
+                                      <a href={`mailto:${vendor.email}`} className="inline-flex items-center gap-1.5">
+                                        <Mail className="h-4 w-4" /> Email
+                                      </a>
+                                    </Button>
+                                  )}
+                                  {vendor.phone && (
+                                    <Button
+                                      type="button"
+                                      variant="outline"
+                                      size="sm"
+                                      className="h-8 rounded-full px-3"
+                                      asChild
+                                    >
+                                      <a href={`tel:${vendor.phone}`} className="inline-flex items-center gap-1.5">
+                                        <Phone className="h-4 w-4" /> Call
+                                      </a>
+                                    </Button>
+                                  )}
+                                  {vendor.website && (
+                                    <Button
+                                      type="button"
+                                      variant="outline"
+                                      size="sm"
+                                      className="h-8 rounded-full px-3"
+                                      asChild
+                                    >
+                                      <a
+                                        href={vendor.website}
+                                        target="_blank"
+                                        rel="noreferrer"
+                                        className="inline-flex items-center gap-1.5"
+                                      >
+                                        <Globe className="h-4 w-4" /> Site
+                                      </a>
+                                    </Button>
+                                  )}
+                                </div>
+                              )}
+                              {vendor.notes && (
+                                <p className="text-sm text-muted-foreground/90">{vendor.notes}</p>
+                              )}
+                            </div>
+                          );
+                        })
                       )}
                     </CardContent>
                   </Card>
