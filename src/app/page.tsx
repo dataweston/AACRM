@@ -73,8 +73,15 @@ const clientStatusLabels: Record<Client["status"], string> = {
 const eventStatusLabels: Record<EventRecord["status"], string> = {
   contacted: "Contacted",
   bid: "Bid sent",
+  proposed: "Proposed",
   confirmed: "Confirmed",
 };
+
+const PIPELINE_PROPOSED_STATUSES = new Set<EventRecord["status"]>([
+  "contacted",
+  "bid",
+  "proposed",
+]);
 
 const preferredContactLabels: Record<NonNullable<Vendor["preferredContact"]>, string> = {
   email: "Email",
@@ -551,7 +558,7 @@ export default function HomePage() {
     }, 0);
     const confirmedAfterVendorCost = Math.max(pipelineConfirmed - confirmedVendorCost, 0);
     const pipelineProposed = data.events
-      .filter((event) => event.status !== "confirmed")
+      .filter((event) => PIPELINE_PROPOSED_STATUSES.has(event.status))
       .reduce((sum, event) => sum + (event.estimate ?? 0), 0);
     const pipeline = CLIENT_PIPELINE.map((column) => ({
       ...column,
