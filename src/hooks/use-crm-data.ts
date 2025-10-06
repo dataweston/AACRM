@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { nanoid } from "nanoid";
 
 import { sampleData } from "@/data/sample";
-import type { CRMData, Client, Event, Invoice, Vendor } from "@/types/crm";
+import type { CRMData, Client, Event, Invoice, InvoiceItem, Vendor } from "@/types/crm";
 
 const STORAGE_KEY = "aacrm-storage-v1";
 
@@ -50,10 +50,38 @@ export function useCrmData() {
       vendors: [withGeneratedId(vendor), ...current.vendors],
     }));
 
+  const updateVendor = (vendorId: string, vendor: Omit<Vendor, "id">) =>
+    setData((current) => ({
+      ...current,
+      vendors: current.vendors.map((entry) =>
+        entry.id === vendorId ? { ...entry, ...vendor, id: vendorId } : entry
+      ),
+    }));
+
+  const deleteVendor = (vendorId: string) =>
+    setData((current) => ({
+      ...current,
+      vendors: current.vendors.filter((entry) => entry.id !== vendorId),
+    }));
+
   const addEvent = (event: Omit<Event, "id">) =>
     setData((current) => ({
       ...current,
       events: [withGeneratedId(event), ...current.events],
+    }));
+
+  const updateEvent = (eventId: string, event: Omit<Event, "id">) =>
+    setData((current) => ({
+      ...current,
+      events: current.events.map((entry) =>
+        entry.id === eventId ? { ...entry, ...event, id: eventId } : entry
+      ),
+    }));
+
+  const deleteEvent = (eventId: string) =>
+    setData((current) => ({
+      ...current,
+      events: current.events.filter((entry) => entry.id !== eventId),
     }));
 
   const addInvoice = (invoice: Omit<Invoice, "id">) =>
@@ -71,12 +99,61 @@ export function useCrmData() {
       ],
     }));
 
+  const normalizeInvoiceItems = (items: (InvoiceItem | Omit<InvoiceItem, "id">)[]) =>
+    items.map((item) => ({
+      ...item,
+      id: item.id ?? nanoid(),
+    }));
+
+  const updateInvoice = (invoiceId: string, invoice: Omit<Invoice, "id">) =>
+    setData((current) => ({
+      ...current,
+      invoices: current.invoices.map((entry) =>
+        entry.id === invoiceId
+          ? {
+              ...entry,
+              ...invoice,
+              id: invoiceId,
+              items: normalizeInvoiceItems(invoice.items),
+            }
+          : entry
+      ),
+    }));
+
+  const deleteInvoice = (invoiceId: string) =>
+    setData((current) => ({
+      ...current,
+      invoices: current.invoices.filter((entry) => entry.id !== invoiceId),
+    }));
+
+  const updateClient = (clientId: string, client: Omit<Client, "id">) =>
+    setData((current) => ({
+      ...current,
+      clients: current.clients.map((entry) =>
+        entry.id === clientId ? { ...entry, ...client, id: clientId } : entry
+      ),
+    }));
+
+  const deleteClient = (clientId: string) =>
+    setData((current) => ({
+      ...current,
+      clients: current.clients.filter((entry) => entry.id !== clientId),
+    }));
+
   return {
     data,
     isHydrated,
     addClient,
+    updateClient,
+    deleteClient,
     addVendor,
+    updateVendor,
+    deleteVendor,
     addEvent,
+    updateEvent,
+    deleteEvent,
     addInvoice,
+    updateInvoice,
+    deleteInvoice,
   };
 }
