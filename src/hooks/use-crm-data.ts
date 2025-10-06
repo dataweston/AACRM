@@ -20,6 +20,16 @@ function withGeneratedId<T extends { id?: string }>(item: T) {
   };
 }
 
+type InvoiceItemInput = InvoiceItem | Omit<InvoiceItem, "id">;
+
+const withInvoiceItemId = (item: InvoiceItemInput): InvoiceItem => {
+  if ("id" in item && item.id) {
+    return { ...item, id: item.id };
+  }
+
+  return { ...item, id: nanoid() };
+};
+
 export function useCrmData() {
   const [data, setData] = useState<CRMData>(sampleData);
   const [isHydrated, setIsHydrated] = useState(false);
@@ -95,20 +105,14 @@ export function useCrmData() {
       invoices: [
         {
           ...withGeneratedId(invoice),
-          items: invoice.items.map((item) => ({
-            ...item,
-            id: item.id ?? nanoid(),
-          })),
+          items: invoice.items.map(withInvoiceItemId),
         },
         ...current.invoices,
       ],
     }));
 
-  const normalizeInvoiceItems = (items: (InvoiceItem | Omit<InvoiceItem, "id">)[]) =>
-    items.map((item) => ({
-      ...item,
-      id: item.id ?? nanoid(),
-    }));
+  const normalizeInvoiceItems = (items: InvoiceItemInput[]) =>
+    items.map(withInvoiceItemId);
 
   const updateInvoice = (invoiceId: string, invoice: Omit<Invoice, "id">) =>
     setData((current) => ({
