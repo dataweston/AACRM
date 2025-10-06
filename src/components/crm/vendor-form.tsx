@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -8,17 +8,16 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import type { Vendor } from "@/types/crm";
+
+type VendorFormMode = "create" | "edit";
 
 interface VendorFormProps {
-  onSubmit: (vendor: {
-    name: string;
-    service: string;
-    email?: string;
-    phone?: string;
-    website?: string;
-    preferredContact?: "email" | "phone" | "text";
-    notes?: string;
-  }) => void;
+  mode?: VendorFormMode;
+  initialVendor?: Vendor | null;
+  onSubmit: (vendor: Omit<Vendor, "id">, id?: string) => void;
+  onCancel?: () => void;
+  onDelete?: (id: string) => void;
 }
 
 const createDefaultForm = () => ({
@@ -31,29 +30,109 @@ const createDefaultForm = () => ({
   notes: "",
 });
 
-export function VendorForm({ onSubmit }: VendorFormProps) {
+const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const phonePattern = /^[0-9+().\-\s]{7,}$/;
+
+export function VendorForm({
+  mode = "create",
+  initialVendor,
+  onSubmit,
+  onCancel,
+  onDelete,
+}: VendorFormProps) {
   const [form, setForm] = useState(() => createDefaultForm());
+  const [errors, setErrors] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    if (mode === "edit" && initialVendor) {
+      setForm({
+        name: initialVendor.name,
+        service: initialVendor.service,
+        email: initialVendor.email ?? "",
+        phone: initialVendor.phone ?? "",
+        website: initialVendor.website ?? "",
+        preferredContact: initialVendor.preferredContact ?? "email",
+        notes: initialVendor.notes ?? "",
+      });
+      setErrors({});
+    } else if (mode === "create") {
+      setForm(createDefaultForm());
+      setErrors({});
+    }
+  }, [mode, initialVendor?.id]);
+
+  const validate = () => {
+    const nextErrors: Record<string, string> = {};
+
+    if (!form.name.trim()) {
+      nextErrors.name = "Vendor name is required.";
+    }
+
+    if (!form.service.trim()) {
+      nextErrors.service = "Service is required.";
+    }
+
+    if (form.email && !emailPattern.test(form.email.trim())) {
+      nextErrors.email = "Enter a valid email.";
+    }
+
+    if (form.phone && !phonePattern.test(form.phone.trim())) {
+      nextErrors.phone = "Enter a valid phone number.";
+    }
+
+    if (form.website) {
+      try {
+        const url = new URL(form.website.trim());
+        if (!url.protocol.startsWith("http")) {
+          nextErrors.website = "Include http:// or https://";
+        }
+      } catch (error) {
+        nextErrors.website = "Enter a valid URL.";
+      }
+    }
+
+    return nextErrors;
+  };
 
   const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!form.name || !form.service) return;
-    onSubmit({
-      name: form.name,
-      service: form.service,
-      email: form.email || undefined,
-      phone: form.phone || undefined,
-      website: form.website || undefined,
+    const nextErrors = validate();
+    if (Object.keys(nextErrors).length > 0) {
+      setErrors(nextErrors);
+      return;
+    }
+
+    const payload: Omit<Vendor, "id"> = {
+      name: form.name.trim(),
+      service: form.service.trim(),
+      email: form.email.trim() ? form.email.trim() : undefined,
+      phone: form.phone.trim() ? form.phone.trim() : undefined,
+      website: form.website.trim() ? form.website.trim() : undefined,
       preferredContact: form.preferredContact,
-      notes: form.notes || undefined,
-    });
+      notes: form.notes.trim() ? form.notes.trim() : undefined,
+    };
+
+    onSubmit(payload, mode === "edit" ? initialVendor?.id : undefined);
+
+    if (mode === "create") {
+      setForm(createDefaultForm());
+      setErrors({});
+    } else {
+      onCancel?.();
+    }
+  };
+
+  const handleCancel = () => {
     setForm(createDefaultForm());
+    setErrors({});
+    onCancel?.();
   };
 
   return (
     <Card className="bg-muted/40">
       <CardHeader>
         <CardTitle className="text-base font-semibold text-foreground">
-          Quick add vendor
+          {mode === "edit" ? "Update vendor" : "Quick add vendor"}
         </CardTitle>
       </CardHeader>
       <CardContent>
@@ -65,8 +144,9 @@ export function VendorForm({ onSubmit }: VendorFormProps) {
               placeholder="Company or contact"
               value={form.name}
               onChange={(event) => setForm((prev) => ({ ...prev, name: event.target.value }))}
-              required
+              aria-invalid={Boolean(errors.name)}
             />
+            {errors.name && <p className="text-xs text-destructive">{errors.name}</p>}
           </div>
           <div className="grid gap-2">
             <Label htmlFor="vendor-service">Service *</Label>
@@ -75,8 +155,9 @@ export function VendorForm({ onSubmit }: VendorFormProps) {
               placeholder="Photography, rentals, decor..."
               value={form.service}
               onChange={(event) => setForm((prev) => ({ ...prev, service: event.target.value }))}
-              required
+              aria-invalid={Boolean(errors.service)}
             />
+            {errors.service && <p className="text-xs text-destructive">{errors.service}</p>}
           </div>
           <div className="grid gap-2 sm:grid-cols-2 sm:gap-4">
             <div className="grid gap-2">
@@ -87,7 +168,9 @@ export function VendorForm({ onSubmit }: VendorFormProps) {
                 placeholder="hello@vendor.com"
                 value={form.email}
                 onChange={(event) => setForm((prev) => ({ ...prev, email: event.target.value }))}
+                aria-invalid={Boolean(errors.email)}
               />
+              {errors.email && <p className="text-xs text-destructive">{errors.email}</p>}
             </div>
             <div className="grid gap-2">
               <Label htmlFor="vendor-phone">Phone</Label>
@@ -96,7 +179,9 @@ export function VendorForm({ onSubmit }: VendorFormProps) {
                 placeholder="555-0155"
                 value={form.phone}
                 onChange={(event) => setForm((prev) => ({ ...prev, phone: event.target.value }))}
+                aria-invalid={Boolean(errors.phone)}
               />
+              {errors.phone && <p className="text-xs text-destructive">{errors.phone}</p>}
             </div>
           </div>
           <div className="grid gap-2 sm:grid-cols-2 sm:gap-4">
@@ -107,7 +192,9 @@ export function VendorForm({ onSubmit }: VendorFormProps) {
                 placeholder="https://vendor.com"
                 value={form.website}
                 onChange={(event) => setForm((prev) => ({ ...prev, website: event.target.value }))}
+                aria-invalid={Boolean(errors.website)}
               />
+              {errors.website && <p className="text-xs text-destructive">{errors.website}</p>}
             </div>
             <div className="grid gap-2">
               <Label htmlFor="vendor-preferred-contact">Preferred contact</Label>
@@ -137,9 +224,28 @@ export function VendorForm({ onSubmit }: VendorFormProps) {
               rows={3}
             />
           </div>
-          <Button type="submit" className="justify-self-start">
-            Add vendor
-          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button type="submit" className="justify-self-start">
+              {mode === "edit" ? "Save changes" : "Add vendor"}
+            </Button>
+            {mode === "edit" && (
+              <>
+                <Button type="button" variant="outline" onClick={handleCancel}>
+                  Cancel
+                </Button>
+                {initialVendor && onDelete && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    className="text-destructive hover:text-destructive"
+                    onClick={() => onDelete(initialVendor.id)}
+                  >
+                    Delete
+                  </Button>
+                )}
+              </>
+            )}
+          </div>
         </form>
       </CardContent>
     </Card>

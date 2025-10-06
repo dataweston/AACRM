@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -8,18 +8,16 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import type { Client } from "@/types/crm";
+import type { Client, Event as EventType } from "@/types/crm";
+
+type EventFormMode = "create" | "edit";
 
 interface EventFormProps {
-  onSubmit: (event: {
-    name: string;
-    date: string;
-    clientId: string;
-    venue: string;
-    coordinator: string;
-    timeline?: string;
-    status: "scheduled" | "in-progress" | "wrap-up";
-  }) => void;
+  mode?: EventFormMode;
+  initialEvent?: EventType | null;
+  onSubmit: (event: Omit<EventType, "id">, id?: string) => void;
+  onCancel?: () => void;
+  onDelete?: (id: string) => void;
   clients: Client[];
 }
 
@@ -33,29 +31,98 @@ const createDefaultForm = () => ({
   status: "scheduled" as "scheduled" | "in-progress" | "wrap-up",
 });
 
-export function EventForm({ onSubmit, clients }: EventFormProps) {
+export function EventForm({
+  mode = "create",
+  initialEvent,
+  onSubmit,
+  onCancel,
+  onDelete,
+  clients,
+}: EventFormProps) {
   const [form, setForm] = useState(() => createDefaultForm());
+  const [errors, setErrors] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    if (mode === "edit" && initialEvent) {
+      setForm({
+        name: initialEvent.name,
+        date: initialEvent.date,
+        clientId: initialEvent.clientId,
+        venue: initialEvent.venue,
+        coordinator: initialEvent.coordinator,
+        timeline: initialEvent.timeline ?? "",
+        status: initialEvent.status,
+      });
+      setErrors({});
+    } else if (mode === "create") {
+      setForm(createDefaultForm());
+      setErrors({});
+    }
+  }, [mode, initialEvent?.id]);
+
+  const knownClientIds = useMemo(() => new Set(clients.map((client) => client.id)), [clients]);
+
+  const validate = () => {
+    const nextErrors: Record<string, string> = {};
+
+    if (!form.name.trim()) {
+      nextErrors.name = "Event name is required.";
+    }
+
+    if (!form.date) {
+      nextErrors.date = "Event date is required.";
+    } else if (Number.isNaN(new Date(form.date).getTime())) {
+      nextErrors.date = "Enter a valid date.";
+    }
+
+    if (!form.clientId) {
+      nextErrors.clientId = "Select a client.";
+    } else if (!knownClientIds.has(form.clientId)) {
+      nextErrors.clientId = "Client no longer exists.";
+    }
+
+    return nextErrors;
+  };
 
   const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!form.name || !form.date || !form.clientId) return;
-    onSubmit({
-      name: form.name,
+    const nextErrors = validate();
+    if (Object.keys(nextErrors).length > 0) {
+      setErrors(nextErrors);
+      return;
+    }
+
+    const payload: Omit<EventType, "id"> = {
+      name: form.name.trim(),
       date: form.date,
       clientId: form.clientId,
-      venue: form.venue,
-      coordinator: form.coordinator,
-      timeline: form.timeline || undefined,
+      venue: form.venue.trim(),
+      coordinator: form.coordinator.trim(),
+      timeline: form.timeline.trim() ? form.timeline.trim() : undefined,
       status: form.status,
-    });
+    };
+
+    onSubmit(payload, mode === "edit" ? initialEvent?.id : undefined);
+
+    if (mode === "create") {
+      setForm(createDefaultForm());
+      setErrors({});
+    } else {
+      onCancel?.();
+    }
+  };
+
+  const handleCancel = () => {
     setForm(createDefaultForm());
+    setErrors({});
+    onCancel?.();
   };
 
   return (
     <Card className="bg-muted/40">
       <CardHeader>
         <CardTitle className="text-base font-semibold text-foreground">
-          Quick add event
+          {mode === "edit" ? "Update event" : "Quick add event"}
         </CardTitle>
       </CardHeader>
       <CardContent>
@@ -67,8 +134,9 @@ export function EventForm({ onSubmit, clients }: EventFormProps) {
               placeholder="Event or celebration"
               value={form.name}
               onChange={(event) => setForm((prev) => ({ ...prev, name: event.target.value }))}
-              required
+              aria-invalid={Boolean(errors.name)}
             />
+            {errors.name && <p className="text-xs text-destructive">{errors.name}</p>}
           </div>
           <div className="grid gap-2 sm:grid-cols-2 sm:gap-4">
             <div className="grid gap-2">
@@ -78,8 +146,9 @@ export function EventForm({ onSubmit, clients }: EventFormProps) {
                 type="date"
                 value={form.date}
                 onChange={(event) => setForm((prev) => ({ ...prev, date: event.target.value }))}
-                required
+                aria-invalid={Boolean(errors.date)}
               />
+              {errors.date && <p className="text-xs text-destructive">{errors.date}</p>}
             </div>
             <div className="grid gap-2">
               <Label htmlFor="event-status">Status</Label>
@@ -105,7 +174,7 @@ export function EventForm({ onSubmit, clients }: EventFormProps) {
               id="event-client"
               value={form.clientId}
               onChange={(event) => setForm((prev) => ({ ...prev, clientId: event.target.value }))}
-              required
+              aria-invalid={Boolean(errors.clientId)}
             >
               <option value="">Select client</option>
               {clients.map((client) => (
@@ -114,6 +183,7 @@ export function EventForm({ onSubmit, clients }: EventFormProps) {
                 </option>
               ))}
             </Select>
+            {errors.clientId && <p className="text-xs text-destructive">{errors.clientId}</p>}
           </div>
           <div className="grid gap-2 sm:grid-cols-2 sm:gap-4">
             <div className="grid gap-2">
@@ -147,9 +217,28 @@ export function EventForm({ onSubmit, clients }: EventFormProps) {
               rows={3}
             />
           </div>
-          <Button type="submit" className="justify-self-start">
-            Add event
-          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button type="submit" className="justify-self-start">
+              {mode === "edit" ? "Save changes" : "Add event"}
+            </Button>
+            {mode === "edit" && (
+              <>
+                <Button type="button" variant="outline" onClick={handleCancel}>
+                  Cancel
+                </Button>
+                {initialEvent && onDelete && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    className="text-destructive hover:text-destructive"
+                    onClick={() => onDelete(initialEvent.id)}
+                  >
+                    Delete
+                  </Button>
+                )}
+              </>
+            )}
+          </div>
         </form>
       </CardContent>
     </Card>

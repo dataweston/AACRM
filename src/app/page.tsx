@@ -33,7 +33,7 @@ import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useCrmData } from "@/hooks/use-crm-data";
 import { formatCurrency, formatDate } from "@/lib/format";
-import type { Client, Invoice, Vendor } from "@/types/crm";
+import type { Client, Event as EventRecord, Invoice, Vendor } from "@/types/crm";
 import { cn } from "@/lib/utils";
 
 const CLIENT_PIPELINE: { id: Client["status"]; label: string; accent: string }[] = [
@@ -64,10 +64,117 @@ const preferredContactLabels: Record<NonNullable<Vendor["preferredContact"]>, st
 };
 
 export default function HomePage() {
-  const { data, isHydrated, addClient, addVendor, addEvent, addInvoice } = useCrmData();
+  const {
+    data,
+    isHydrated,
+    addClient,
+    updateClient,
+    deleteClient,
+    addVendor,
+    updateVendor,
+    deleteVendor,
+    addEvent,
+    updateEvent,
+    deleteEvent,
+    addInvoice,
+    updateInvoice,
+    deleteInvoice,
+  } = useCrmData();
   const [activeTab, setActiveTab] = useState("overview");
   const [vendorSearch, setVendorSearch] = useState("");
   const [vendorServiceFilter, setVendorServiceFilter] = useState<string>("all");
+  const [editingClientId, setEditingClientId] = useState<string | null>(null);
+  const [editingVendorId, setEditingVendorId] = useState<string | null>(null);
+  const [editingEventId, setEditingEventId] = useState<string | null>(null);
+  const [editingInvoiceId, setEditingInvoiceId] = useState<string | null>(null);
+
+  const editingClient = useMemo(
+    () => (editingClientId ? data.clients.find((client) => client.id === editingClientId) ?? null : null),
+    [data.clients, editingClientId]
+  );
+  const editingVendor = useMemo(
+    () => (editingVendorId ? data.vendors.find((vendor) => vendor.id === editingVendorId) ?? null : null),
+    [data.vendors, editingVendorId]
+  );
+  const editingEvent = useMemo(
+    () => (editingEventId ? data.events.find((event) => event.id === editingEventId) ?? null : null),
+    [data.events, editingEventId]
+  );
+  const editingInvoice = useMemo(
+    () => (editingInvoiceId ? data.invoices.find((invoice) => invoice.id === editingInvoiceId) ?? null : null),
+    [data.invoices, editingInvoiceId]
+  );
+
+  const confirmRemoval = (message: string) =>
+    typeof window === "undefined" ? true : window.confirm(message);
+
+  const handleClientSubmit = (values: Omit<Client, "id">, id?: string) => {
+    if (id) {
+      updateClient(id, values);
+      setEditingClientId(null);
+    } else {
+      addClient(values);
+    }
+  };
+
+  const handleClientDelete = (id: string) => {
+    if (!confirmRemoval("Delete this client? This action cannot be undone.")) {
+      return;
+    }
+    deleteClient(id);
+    setEditingClientId((current) => (current === id ? null : current));
+  };
+
+  const handleVendorSubmit = (values: Omit<Vendor, "id">, id?: string) => {
+    if (id) {
+      updateVendor(id, values);
+      setEditingVendorId(null);
+    } else {
+      addVendor(values);
+    }
+  };
+
+  const handleVendorDelete = (id: string) => {
+    if (!confirmRemoval("Remove this vendor from your roster?")) {
+      return;
+    }
+    deleteVendor(id);
+    setEditingVendorId((current) => (current === id ? null : current));
+  };
+
+  const handleEventSubmit = (values: Omit<EventRecord, "id">, id?: string) => {
+    if (id) {
+      updateEvent(id, values);
+      setEditingEventId(null);
+    } else {
+      addEvent(values);
+    }
+  };
+
+  const handleEventDelete = (id: string) => {
+    if (!confirmRemoval("Delete this event from your production calendar?")) {
+      return;
+    }
+    deleteEvent(id);
+    setEditingEventId((current) => (current === id ? null : current));
+  };
+
+  const handleInvoiceSubmit = (values: Omit<Invoice, "id">, id?: string) => {
+    if (id) {
+      updateInvoice(id, values);
+      setEditingInvoiceId(null);
+    } else {
+      addInvoice(values);
+    }
+  };
+
+  const handleInvoiceDelete = (id: string) => {
+    if (!confirmRemoval("Delete this invoice? You can’t undo this.")) {
+      return;
+    }
+    deleteInvoice(id);
+    setEditingInvoiceId((current) => (current === id ? null : current));
+  };
 
   const handleExport = () => {
     if (typeof window === "undefined") return;
@@ -539,9 +646,31 @@ export default function HomePage() {
                               Issued {formatDate(invoice.issueDate)} · Due {formatDate(invoice.dueDate)}
                             </p>
                           </div>
-                          <Badge className={`${invoiceStatusStyles[invoice.status]} capitalize`}>
-                            {invoice.status}
-                          </Badge>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <Badge className={`${invoiceStatusStyles[invoice.status]} capitalize`}>
+                              {invoice.status}
+                            </Badge>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => {
+                                setActiveTab("billing");
+                                setEditingInvoiceId(invoice.id);
+                              }}
+                            >
+                              Edit
+                            </Button>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="ghost"
+                              className="text-destructive hover:text-destructive"
+                              onClick={() => handleInvoiceDelete(invoice.id)}
+                            >
+                              Delete
+                            </Button>
+                          </div>
                         </div>
                         <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
                           {client && <span>{client.name}</span>}
@@ -566,7 +695,13 @@ export default function HomePage() {
 
               <TabsContent value="clients" className="space-y-6">
                 <section className="grid gap-6 lg:grid-cols-[1fr_1.1fr]">
-                  <ClientForm onSubmit={addClient} />
+                  <ClientForm
+                    mode={editingClient ? "edit" : "create"}
+                    initialClient={editingClient ?? undefined}
+                    onSubmit={handleClientSubmit}
+                    onCancel={() => setEditingClientId(null)}
+                    onDelete={handleClientDelete}
+                  />
                   <Card className="bg-card/90">
                     <CardHeader className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                       <div>
@@ -583,9 +718,28 @@ export default function HomePage() {
                               <h3 className="text-base font-semibold text-foreground">{client.name}</h3>
                               <p className="text-xs text-muted-foreground">{client.email}</p>
                             </div>
-                            <Badge className="capitalize bg-primary/10 text-primary">
-                              {clientStatusLabels[client.status]}
-                            </Badge>
+                            <div className="flex flex-wrap items-center gap-2">
+                              <Badge className="capitalize bg-primary/10 text-primary">
+                                {clientStatusLabels[client.status]}
+                              </Badge>
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => setEditingClientId(client.id)}
+                              >
+                                Edit
+                              </Button>
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="ghost"
+                                className="text-destructive hover:text-destructive"
+                                onClick={() => handleClientDelete(client.id)}
+                              >
+                                Delete
+                              </Button>
+                            </div>
                           </div>
                           <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
                             {client.phone && <span>{client.phone}</span>}
@@ -606,7 +760,14 @@ export default function HomePage() {
 
               <TabsContent value="events" className="space-y-6">
                 <section className="grid gap-6 lg:grid-cols-[1fr_1.1fr]">
-                  <EventForm onSubmit={addEvent} clients={data.clients} vendors={data.vendors} />
+                  <EventForm
+                    mode={editingEvent ? "edit" : "create"}
+                    initialEvent={editingEvent ?? undefined}
+                    onSubmit={handleEventSubmit}
+                    onCancel={() => setEditingEventId(null)}
+                    onDelete={handleEventDelete}
+                    clients={data.clients}
+                  />
                   <Card className="bg-card/90">
                     <CardHeader className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                       <div>
@@ -627,9 +788,28 @@ export default function HomePage() {
                                   {formatDate(event.date)} · {event.venue}
                                 </p>
                               </div>
-                              <Badge variant="neutral" className="capitalize">
-                                {event.status.replace("-", " ")}
-                              </Badge>
+                              <div className="flex flex-wrap items-center gap-2">
+                                <Badge variant="neutral" className="capitalize">
+                                  {event.status.replace("-", " ")}
+                                </Badge>
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="ghost"
+                                  onClick={() => setEditingEventId(event.id)}
+                                >
+                                  Edit
+                                </Button>
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="ghost"
+                                  className="text-destructive hover:text-destructive"
+                                  onClick={() => handleEventDelete(event.id)}
+                                >
+                                  Delete
+                                </Button>
+                              </div>
                             </div>
                             <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
                               {client && <span>Client · {client.name}</span>}
@@ -648,7 +828,13 @@ export default function HomePage() {
 
               <TabsContent value="vendors" className="space-y-6">
                 <section className="grid gap-6 lg:grid-cols-[1fr_1.1fr]">
-                  <VendorForm onSubmit={addVendor} />
+                  <VendorForm
+                    mode={editingVendor ? "edit" : "create"}
+                    initialVendor={editingVendor ?? undefined}
+                    onSubmit={handleVendorSubmit}
+                    onCancel={() => setEditingVendorId(null)}
+                    onDelete={handleVendorDelete}
+                  />
                   <Card className="bg-card/90">
                     <CardHeader className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                       <div>
@@ -726,13 +912,32 @@ export default function HomePage() {
                                 <h3 className="text-base font-semibold text-foreground">{vendor.name}</h3>
                                 <p className="text-xs text-muted-foreground">{vendor.service}</p>
                               </div>
-                              {vendor.preferredContact ? (
-                                <Badge variant="neutral" className="capitalize">
-                                  Prefers {preferredContactLabels[vendor.preferredContact]}
-                                </Badge>
-                              ) : (
-                                <Badge variant="neutral">Flexible contact</Badge>
-                              )}
+                              <div className="flex flex-wrap items-center gap-2">
+                                {vendor.preferredContact ? (
+                                  <Badge variant="neutral" className="capitalize">
+                                    Prefers {preferredContactLabels[vendor.preferredContact]}
+                                  </Badge>
+                                ) : (
+                                  <Badge variant="neutral">Flexible contact</Badge>
+                                )}
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="ghost"
+                                  onClick={() => setEditingVendorId(vendor.id)}
+                                >
+                                  Edit
+                                </Button>
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="ghost"
+                                  className="text-destructive hover:text-destructive"
+                                  onClick={() => handleVendorDelete(vendor.id)}
+                                >
+                                  Delete
+                                </Button>
+                              </div>
                             </div>
                             <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
                               {vendor.email && <span>{vendor.email}</span>}
@@ -802,7 +1007,14 @@ export default function HomePage() {
 
           <TabsContent value="billing" className="space-y-6">
             <section className="grid gap-6 lg:grid-cols-[1fr_1.1fr]">
-              <InvoiceForm onSubmit={addInvoice} clients={data.clients} />
+              <InvoiceForm
+                mode={editingInvoice ? "edit" : "create"}
+                initialInvoice={editingInvoice ?? undefined}
+                onSubmit={handleInvoiceSubmit}
+                onCancel={() => setEditingInvoiceId(null)}
+                onDelete={handleInvoiceDelete}
+                clients={data.clients}
+              />
               <Card className="bg-card/90">
                 <CardHeader className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                   <div>
@@ -823,9 +1035,28 @@ export default function HomePage() {
                               Issued {formatDate(invoice.issueDate)} · Due {formatDate(invoice.dueDate)}
                             </p>
                           </div>
-                          <Badge className={`${invoiceStatusStyles[invoice.status]} capitalize`}>
-                            {invoice.status}
-                          </Badge>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <Badge className={`${invoiceStatusStyles[invoice.status]} capitalize`}>
+                              {invoice.status}
+                            </Badge>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => setEditingInvoiceId(invoice.id)}
+                            >
+                              Edit
+                            </Button>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="ghost"
+                              className="text-destructive hover:text-destructive"
+                              onClick={() => handleInvoiceDelete(invoice.id)}
+                            >
+                              Delete
+                            </Button>
+                          </div>
                         </div>
                         <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
                           {client && <span>{client.name}</span>}
