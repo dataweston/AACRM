@@ -42,6 +42,7 @@ type FormState = {
 const EVENT_STATUS_OPTIONS: { value: EventStatus; label: string }[] = [
   { value: "contacted", label: "Contacted" },
   { value: "bid", label: "Bid sent" },
+  { value: "proposed", label: "Proposed" },
   { value: "confirmed", label: "Confirmed" },
 ];
 
