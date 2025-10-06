@@ -84,7 +84,7 @@ export function InvoiceForm({
       setItems([{ ...defaultItem }]);
       setErrors({});
     }
-  }, [mode, initialInvoice?.id]);
+  }, [mode, initialInvoice]);
 
   const validate = () => {
     const nextErrors: Record<string, string> = {};

@@ -59,7 +59,7 @@ export function VendorForm({
       setForm(createDefaultForm());
       setErrors({});
     }
-  }, [mode, initialVendor?.id]);
+  }, [mode, initialVendor]);
 
   const validate = () => {
     const nextErrors: Record<string, string> = {};
