@@ -8,12 +8,27 @@ import type { CRMData, Client, Event, Invoice, InvoiceItem, Vendor } from "@/typ
 
 const STORAGE_KEY = "aacrm-storage-v1";
 
+function withGeneratedId(item: Omit<Client, "id">): Client;
+function withGeneratedId(item: Omit<Vendor, "id">): Vendor;
+function withGeneratedId(item: Omit<Event, "id">): Event;
+function withGeneratedId(item: Omit<Invoice, "id">): Invoice;
+function withGeneratedId<T extends { id?: string }>(item: T): T & { id: string };
 function withGeneratedId<T extends { id?: string }>(item: T) {
   return {
     ...item,
     id: item.id ?? nanoid(),
   };
 }
+
+type InvoiceItemInput = InvoiceItem | Omit<InvoiceItem, "id">;
+
+const withInvoiceItemId = (item: InvoiceItemInput): InvoiceItem => {
+  if ("id" in item && item.id) {
+    return { ...item, id: item.id };
+  }
+
+  return { ...item, id: nanoid() };
+};
 
 export function useCrmData() {
   const [data, setData] = useState<CRMData>(sampleData);
@@ -90,20 +105,14 @@ export function useCrmData() {
       invoices: [
         {
           ...withGeneratedId(invoice),
-          items: invoice.items.map((item) => ({
-            ...item,
-            id: item.id ?? nanoid(),
-          })),
+          items: invoice.items.map(withInvoiceItemId),
         },
         ...current.invoices,
       ],
     }));
 
-  const normalizeInvoiceItems = (items: (InvoiceItem | Omit<InvoiceItem, "id">)[]) =>
-    items.map((item) => ({
-      ...item,
-      id: item.id ?? nanoid(),
-    }));
+  const normalizeInvoiceItems = (items: InvoiceItemInput[]) =>
+    items.map(withInvoiceItemId);
 
   const updateInvoice = (invoiceId: string, invoice: Omit<Invoice, "id">) =>
     setData((current) => ({
