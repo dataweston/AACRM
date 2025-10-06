@@ -82,6 +82,7 @@ export default function HomePage() {
   const [editingVendorId, setEditingVendorId] = useState<string | null>(null);
   const [editingEventId, setEditingEventId] = useState<string | null>(null);
   const [editingInvoiceId, setEditingInvoiceId] = useState<string | null>(null);
+  const [recordsTab, setRecordsTab] = useState<"clients" | "events" | "vendors">("clients");
   const [isOffline, setIsOffline] = useState(false);
   const { session, status, signInWithApple, signOut } = useAuth();
   const [appleName, setAppleName] = useState("");
@@ -152,7 +153,15 @@ export default function HomePage() {
   const handleEventEditRequest = (eventId: string) => {
     if (!eventId) return;
     setEditingEventId(eventId);
-    setActiveTab("events");
+    setRecordsTab("events");
+    setActiveTab("records");
+  };
+
+  const handleClientEditRequest = (clientId: string) => {
+    if (!clientId) return;
+    setEditingClientId(clientId);
+    setRecordsTab("clients");
+    setActiveTab("records");
   };
 
   const isClientDrag = (event: DragEvent<HTMLElement>) => {
@@ -814,6 +823,15 @@ export default function HomePage() {
                                 onDragStart={(event) => handleDragStart(event, client.id)}
                                 onDragEnd={handleDragEnd}
                                 aria-grabbed={draggingClientId === client.id}
+                                role="button"
+                                tabIndex={0}
+                                onClick={() => handleClientEditRequest(client.id)}
+                                onKeyDown={(event) => {
+                                  if (event.key === "Enter" || event.key === " ") {
+                                    event.preventDefault();
+                                    handleClientEditRequest(client.id);
+                                  }
+                                }}
                               >
                                 <div className="flex items-center justify-between">
                                   <p className="font-medium text-foreground">{client.name}</p>
@@ -1018,7 +1036,7 @@ export default function HomePage() {
           </TabsContent>
 
           <TabsContent value="records" className="space-y-8">
-            <Tabs defaultValue="clients" className="space-y-6">
+            <Tabs value={recordsTab} onValueChange={setRecordsTab} className="space-y-6">
               <TabsList className="flex w-full flex-wrap gap-2 bg-muted/70 p-2 text-xs sm:text-sm">
                 <TabsTrigger value="clients">Clients</TabsTrigger>
                 <TabsTrigger value="events">Events</TabsTrigger>
