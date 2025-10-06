@@ -15,6 +15,7 @@ export interface Vendor {
   id: string;
   name: string;
   service: string;
+  cost?: number;
   email?: string;
   phone?: string;
   website?: string;
