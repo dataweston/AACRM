@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import type { Client, Event as EventType } from "@/types/crm";
+import type { Client, Event as EventType, Vendor } from "@/types/crm";
 
 type EventFormMode = "create" | "edit";
 
@@ -19,9 +19,21 @@ interface EventFormProps {
   onCancel?: () => void;
   onDelete?: (id: string) => void;
   clients: Client[];
+  vendors: Vendor[];
 }
 
-const createDefaultForm = () => ({
+type FormState = {
+  name: string;
+  date: string;
+  clientId: string;
+  venue: string;
+  coordinator: string;
+  timeline: string;
+  status: "scheduled" | "in-progress" | "wrap-up";
+  vendorIds: string[];
+};
+
+const createDefaultForm = (): FormState => ({
   name: "",
   date: "",
   clientId: "",
@@ -29,6 +41,7 @@ const createDefaultForm = () => ({
   coordinator: "",
   timeline: "",
   status: "scheduled" as "scheduled" | "in-progress" | "wrap-up",
+  vendorIds: [],
 });
 
 export function EventForm({
@@ -38,8 +51,9 @@ export function EventForm({
   onCancel,
   onDelete,
   clients,
+  vendors,
 }: EventFormProps) {
-  const [form, setForm] = useState(() => createDefaultForm());
+  const [form, setForm] = useState<FormState>(() => createDefaultForm());
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   useEffect(() => {
@@ -52,6 +66,7 @@ export function EventForm({
         coordinator: initialEvent.coordinator,
         timeline: initialEvent.timeline ?? "",
         status: initialEvent.status,
+        vendorIds: initialEvent.vendorIds ? [...initialEvent.vendorIds] : [],
       });
       setErrors({});
     } else if (mode === "create") {
@@ -61,6 +76,26 @@ export function EventForm({
   }, [mode, initialEvent?.id]);
 
   const knownClientIds = useMemo(() => new Set(clients.map((client) => client.id)), [clients]);
+  const knownVendorIds = useMemo(() => new Set(vendors.map((vendor) => vendor.id)), [vendors]);
+
+  useEffect(() => {
+    setForm((previous) => {
+      if (previous.vendorIds.length === 0) {
+        return previous;
+      }
+
+      const validVendorIds = previous.vendorIds.filter((vendorId) => knownVendorIds.has(vendorId));
+
+      if (validVendorIds.length === previous.vendorIds.length) {
+        return previous;
+      }
+
+      return {
+        ...previous,
+        vendorIds: validVendorIds,
+      };
+    });
+  }, [knownVendorIds]);
 
   const validate = () => {
     const nextErrors: Record<string, string> = {};
@@ -92,6 +127,8 @@ export function EventForm({
       return;
     }
 
+    const vendorIds = form.vendorIds.filter((vendorId) => knownVendorIds.has(vendorId));
+
     const payload: Omit<EventType, "id"> = {
       name: form.name.trim(),
       date: form.date,
@@ -100,6 +137,7 @@ export function EventForm({
       coordinator: form.coordinator.trim(),
       timeline: form.timeline.trim() ? form.timeline.trim() : undefined,
       status: form.status,
+      vendorIds: vendorIds.length > 0 ? vendorIds : undefined,
     };
 
     onSubmit(payload, mode === "edit" ? initialEvent?.id : undefined);
@@ -116,6 +154,22 @@ export function EventForm({
     setForm(createDefaultForm());
     setErrors({});
     onCancel?.();
+  };
+
+  const toggleVendorId = (vendorId: string) => {
+    setForm((previous) => {
+      const vendorIds = new Set(previous.vendorIds);
+      if (vendorIds.has(vendorId)) {
+        vendorIds.delete(vendorId);
+      } else {
+        vendorIds.add(vendorId);
+      }
+
+      return {
+        ...previous,
+        vendorIds: Array.from(vendorIds),
+      };
+    });
   };
 
   return (
@@ -205,6 +259,40 @@ export function EventForm({
                   setForm((prev) => ({ ...prev, coordinator: event.target.value }))
                 }
               />
+            </div>
+          </div>
+          <div className="grid gap-2">
+            <Label>Vendors</Label>
+            <div className="space-y-2 rounded-lg border border-border/60 bg-background/50 p-3">
+              {vendors.length === 0 && (
+                <p className="text-xs text-muted-foreground">
+                  Add vendors to your roster to assign them here.
+                </p>
+              )}
+              {vendors.map((vendor) => {
+                const inputId = `event-vendor-${vendor.id}`;
+                const isChecked = form.vendorIds.includes(vendor.id);
+
+                return (
+                  <label
+                    key={vendor.id}
+                    htmlFor={inputId}
+                    className="flex cursor-pointer items-center justify-between gap-3 rounded-md border border-transparent px-2 py-1 text-sm hover:border-border"
+                  >
+                    <div className="flex flex-col">
+                      <span className="font-medium text-foreground">{vendor.name}</span>
+                      <span className="text-xs text-muted-foreground">{vendor.service}</span>
+                    </div>
+                    <input
+                      id={inputId}
+                      type="checkbox"
+                      checked={isChecked}
+                      onChange={() => toggleVendorId(vendor.id)}
+                      className="h-4 w-4 rounded border border-input text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                    />
+                  </label>
+                );
+              })}
             </div>
           </div>
           <div className="grid gap-2">

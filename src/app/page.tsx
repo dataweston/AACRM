@@ -1,8 +1,8 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { LucideIcon } from "lucide-react";
-import { BarChart3, Globe, Mail, Phone, Plus, Search, ShoppingBag, Sparkles, Users } from "lucide-react";
+import { Apple, BarChart3, Globe, Mail, Phone, Plus, Search, ShoppingBag, Sparkles, Users } from "lucide-react";
 import { ClientForm } from "@/components/crm/client-form";
 import { EventForm } from "@/components/crm/event-form";
 import { InvoiceForm } from "@/components/crm/invoice-form";
@@ -23,6 +23,7 @@ import { useCrmData } from "@/hooks/use-crm-data";
 import { formatCurrency, formatDate } from "@/lib/format";
 import type { Client, Event as EventRecord, Invoice, Vendor } from "@/types/crm";
 import { cn } from "@/lib/utils";
+import { useAuth } from "@/components/auth/auth-provider";
 
 const CLIENT_PIPELINE: { id: Client["status"]; label: string; accent: string }[] = [
   { id: "lead", label: "Leads", accent: "bg-amber-100 text-amber-800" },
@@ -51,6 +52,7 @@ const preferredContactLabels: Record<NonNullable<Vendor["preferredContact"]>, st
   text: "Text",
 };
 
+// Display-only marketing copy for the hero card; no backend integration is wired to these entries.
 const WIX_IMPORT_MODULES: { title: string; description: string; icon: LucideIcon }[] = [
   {
     title: "Sales & payouts",
@@ -93,6 +95,28 @@ export default function HomePage() {
   const [editingVendorId, setEditingVendorId] = useState<string | null>(null);
   const [editingEventId, setEditingEventId] = useState<string | null>(null);
   const [editingInvoiceId, setEditingInvoiceId] = useState<string | null>(null);
+  const [isOffline, setIsOffline] = useState(false);
+  const { session, status, signInWithApple, signOut } = useAuth();
+  const [appleName, setAppleName] = useState("");
+  const [appleEmail, setAppleEmail] = useState("");
+  const [appleError, setAppleError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const updateStatus = () => {
+      setIsOffline(!window.navigator.onLine);
+    };
+
+    updateStatus();
+    window.addEventListener("online", updateStatus);
+    window.addEventListener("offline", updateStatus);
+
+    return () => {
+      window.removeEventListener("online", updateStatus);
+      window.removeEventListener("offline", updateStatus);
+    };
+  }, []);
 
   const editingClient = useMemo(
     () => (editingClientId ? data.clients.find((client) => client.id === editingClientId) ?? null : null),
@@ -226,6 +250,12 @@ export default function HomePage() {
     return map;
   }, [data.clients]);
 
+  const vendorMap = useMemo(() => {
+    const map = new Map<string, Vendor>();
+    data.vendors.forEach((vendor) => map.set(vendor.id, vendor));
+    return map;
+  }, [data.vendors]);
+
   const vendorServiceCounts = useMemo(() => {
     const counts = data.vendors.reduce<Record<string, number>>((accumulator, vendor) => {
       const key = vendor.service?.trim() || "Other";
@@ -272,6 +302,82 @@ export default function HomePage() {
     setVendorServiceFilter("all");
   };
 
+  if (status === "loading") {
+    return (
+      <main className="mx-auto flex min-h-screen max-w-5xl items-center justify-center px-6">
+        <Card className="w-full max-w-md border-dashed border-muted-foreground/40 bg-card/70 text-center">
+          <CardHeader className="space-y-3">
+            <CardTitle className="flex items-center justify-center gap-2 text-lg font-semibold">
+              <Sparkles className="h-5 w-5 text-primary" />
+              Checking your sign-in
+            </CardTitle>
+            <CardDescription className="text-sm text-muted-foreground">
+              aacrm is verifying your saved Apple session.
+            </CardDescription>
+          </CardHeader>
+        </Card>
+      </main>
+    );
+  }
+
+  if (!session) {
+    return (
+      <main className="mx-auto flex min-h-screen max-w-5xl items-center justify-center px-6">
+        <Card className="w-full max-w-md border border-primary/30 bg-background/80 text-center shadow-lg">
+          <CardHeader className="space-y-3">
+            <CardTitle className="flex items-center justify-center gap-2 text-lg font-semibold text-foreground">
+              <Apple className="h-6 w-6 text-foreground" />
+              Sign in to your studio workspace
+            </CardTitle>
+            <CardDescription className="text-sm text-muted-foreground">
+              Use your Apple ID email to unlock event records, invoices, and vendor data stored locally on this
+              device.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4 text-left">
+            <div className="space-y-3">
+              <Input
+                id="apple-name"
+                placeholder="Name (optional)"
+                value={appleName}
+                onChange={(event) => setAppleName(event.target.value)}
+              />
+              <Input
+                id="apple-email"
+                type="email"
+                placeholder="Apple ID email"
+                value={appleEmail}
+                onChange={(event) => setAppleEmail(event.target.value)}
+              />
+              {appleError && <p className="text-xs text-destructive">{appleError}</p>}
+            </div>
+            <Button
+              type="button"
+              className="w-full justify-center bg-foreground text-background hover:bg-foreground/90"
+              onClick={() => {
+                try {
+                  signInWithApple({ name: appleName, email: appleEmail });
+                  setAppleError(null);
+                  setAppleName("");
+                  setAppleEmail("");
+                } catch (error) {
+                  setAppleError(
+                    error instanceof Error ? error.message : "Unable to sign in with the provided Apple ID."
+                  );
+                }
+              }}
+            >
+              Continue with Apple
+            </Button>
+            <p className="text-xs text-muted-foreground">
+              Sessions are saved to this device so you can keep working even when you go offline.
+            </p>
+          </CardContent>
+        </Card>
+      </main>
+    );
+  }
+
   if (!isHydrated) {
     return (
       <main className="mx-auto flex min-h-screen max-w-5xl items-center justify-center px-6">
@@ -292,6 +398,23 @@ export default function HomePage() {
 
   return (
     <div className="min-h-screen bg-background">
+      <header className="border-b border-border/50 bg-background/80 backdrop-blur">
+        <div className="mx-auto flex w-full max-w-6xl items-center justify-between gap-3 px-4 py-3 text-xs sm:text-sm">
+          <div className="text-muted-foreground">
+            Signed in as {session.user?.name || session.user?.email || "your team"}
+          </div>
+          <div className="flex items-center gap-2">
+            {isOffline && (
+              <Badge variant="outline" className="border-amber-300 bg-amber-100 text-amber-800">
+                Offline mode
+              </Badge>
+            )}
+            <Button type="button" size="sm" variant="outline" onClick={() => signOut()}>
+              Sign out
+            </Button>
+          </div>
+        </div>
+      </header>
       <section className="border-b border-border/60 bg-[radial-gradient(circle_at_top,_#f9dfb1,_transparent_45%),_#fff]">
         <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-4 py-10 sm:py-14">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
@@ -500,6 +623,9 @@ export default function HomePage() {
                   )}
                   {overview.upcomingEvents.map((event) => {
                     const client = clientMap.get(event.clientId);
+                    const assignedVendors = (event.vendorIds ?? [])
+                      .map((vendorId) => vendorMap.get(vendorId) ?? null)
+                      .filter((vendor): vendor is Vendor => Boolean(vendor));
                     return (
                       <div
                         key={event.id}
@@ -521,6 +647,11 @@ export default function HomePage() {
                         </p>
                         {client && (
                           <p className="text-xs text-muted-foreground">Client · {client.name}</p>
+                        )}
+                        {assignedVendors.length > 0 && (
+                          <p className="text-xs text-muted-foreground">
+                            Vendors · {assignedVendors.map((vendor) => vendor.name).join(", ")}
+                          </p>
                         )}
                         {event.timeline && (
                           <p className="text-xs text-muted-foreground/80">{event.timeline}</p>
@@ -682,6 +813,7 @@ export default function HomePage() {
                     onCancel={() => setEditingEventId(null)}
                     onDelete={handleEventDelete}
                     clients={data.clients}
+                    vendors={data.vendors}
                   />
                   <Card className="bg-card/90">
                     <CardHeader className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
@@ -694,6 +826,9 @@ export default function HomePage() {
                     <CardContent className="space-y-3">
                       {data.events.map((event) => {
                         const client = clientMap.get(event.clientId);
+                        const assignedVendors = (event.vendorIds ?? [])
+                          .map((vendorId) => vendorMap.get(vendorId) ?? null)
+                          .filter((vendor): vendor is Vendor => Boolean(vendor));
                         return (
                           <div key={event.id} className="space-y-2 rounded-xl border border-border/80 bg-muted/40 p-4">
                             <div className="flex flex-wrap items-center justify-between gap-3">
@@ -730,6 +865,11 @@ export default function HomePage() {
                               {client && <span>Client · {client.name}</span>}
                               {event.coordinator && <span>Lead · {event.coordinator}</span>}
                             </div>
+                            {assignedVendors.length > 0 && (
+                              <p className="text-xs text-muted-foreground">
+                                Vendors · {assignedVendors.map((vendor) => vendor.name).join(", ")}
+                              </p>
+                            )}
                             {event.timeline && (
                               <p className="text-xs text-muted-foreground/80">{event.timeline}</p>
                             )}

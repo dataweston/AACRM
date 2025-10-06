@@ -64,6 +64,7 @@ export const sampleData: CRMData = {
       venue: "Seaside Conservatory",
       coordinator: "Amelia Sloan",
       timeline: "Ceremony 4pm, Dinner 6pm, Dancing 8pm",
+      vendorIds: ["vendor-aurora-florals", "vendor-lyra-catering"],
       status: "scheduled",
     },
     {
@@ -74,6 +75,7 @@ export const sampleData: CRMData = {
       venue: "Atrium 55",
       coordinator: "Miles Carter",
       timeline: "Keynote 7pm, Awards 8pm, Afterparty 10pm",
+      vendorIds: ["vendor-lyra-catering"],
       status: "in-progress",
     },
   ],
