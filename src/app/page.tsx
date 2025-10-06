@@ -148,6 +148,12 @@ export default function HomePage() {
     setEditingClientId((current) => (current === id ? null : current));
   };
 
+  const handleEventEditRequest = (eventId: string) => {
+    if (!eventId) return;
+    setEditingEventId(eventId);
+    setActiveTab("events");
+  };
+
   const isClientDrag = (event: DragEvent<HTMLElement>) => {
     const transfer = event.dataTransfer;
     if (!transfer) return false;
@@ -831,9 +837,15 @@ export default function HomePage() {
                       .map((vendorId) => vendorMap.get(vendorId) ?? null)
                       .filter((vendor): vendor is Vendor => Boolean(vendor));
                     return (
-                      <div
+                      <button
                         key={event.id}
-                        className="space-y-2 rounded-xl border border-border/70 bg-muted/40 p-4"
+                        type="button"
+                        onClick={() => handleEventEditRequest(event.id)}
+                        className={cn(
+                          "w-full space-y-2 rounded-xl border border-border/70 bg-muted/40 p-4 text-left",
+                          "transition hover:border-primary/60 hover:shadow-sm",
+                          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
+                        )}
                       >
                         <div className="flex flex-wrap items-center justify-between gap-2">
                           <div>
@@ -870,7 +882,7 @@ export default function HomePage() {
                         {event.timeline && (
                           <p className="text-xs text-muted-foreground/80">{event.timeline}</p>
                         )}
-                      </div>
+                      </button>
                     );
                   })}
                 </CardContent>
@@ -1060,7 +1072,7 @@ export default function HomePage() {
                                   type="button"
                                   size="sm"
                                   variant="ghost"
-                                  onClick={() => setEditingEventId(event.id)}
+                                  onClick={() => handleEventEditRequest(event.id)}
                                 >
                                   Edit
                                 </Button>
