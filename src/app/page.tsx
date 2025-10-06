@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ChangeEvent, ClipboardEvent, DragEvent, KeyboardEvent } from "react";
 import { Apple, Globe, Mail, Phone, Search, Sparkles } from "lucide-react";
 import { ClientForm } from "@/components/crm/client-form";
@@ -122,6 +122,12 @@ export default function HomePage() {
   const [selectedClientIds, setSelectedClientIds] = useState<string[]>([]);
   const [selectedEventIds, setSelectedEventIds] = useState<string[]>([]);
   const [selectedVendorIds, setSelectedVendorIds] = useState<string[]>([]);
+  const [recordsTab, setRecordsTab] = useState<"clients" | "events" | "vendors">("clients");
+  const handleRecordsTabChange = useCallback((value: string) => {
+    if (value === "clients" || value === "events" || value === "vendors") {
+      setRecordsTab(value);
+    }
+  }, []);
   const [isOffline, setIsOffline] = useState(false);
   const { session, status, signInWithApple, signOut } = useAuth();
   const [appleName, setAppleName] = useState("");
@@ -238,7 +244,15 @@ export default function HomePage() {
   const handleEventEditRequest = (eventId: string) => {
     if (!eventId) return;
     setEditingEventId(eventId);
-    setActiveTab("events");
+    setRecordsTab("events");
+    setActiveTab("records");
+  };
+
+  const handleClientEditRequest = (clientId: string) => {
+    if (!clientId) return;
+    setEditingClientId(clientId);
+    setRecordsTab("clients");
+    setActiveTab("records");
   };
 
   const isClientDrag = (event: DragEvent<HTMLElement>) => {
@@ -650,14 +664,28 @@ export default function HomePage() {
   };
 
   const overview = useMemo(() => {
-    const activeClients = data.clients.filter((client) => client.status !== "completed");
-    const bookedRevenue = data.clients
-      .filter((client) => client.status === "booked" || client.status === "planning")
-      .reduce((sum, client) => sum + (client.budget ?? 0), 0);
-    const outstandingInvoices = data.invoices
-      .filter((invoice) => invoice.status === "sent" || invoice.status === "overdue")
-      .reduce((sum, invoice) => sum + invoice.total, 0);
-
+    const vendorCostMap = new Map(data.vendors.map((vendor) => [vendor.id, vendor.cost ?? 0]));
+    const confirmedEvents = data.events.filter((event) => event.status === "confirmed");
+    const totalConfirmedEstimate = confirmedEvents.reduce(
+      (sum, event) => sum + (event.estimate ?? 0),
+      0
+    );
+    const totalConfirmedDeposits = confirmedEvents.reduce(
+      (sum, event) => sum + (event.deposit ?? 0),
+      0
+    );
+    const pipelineConfirmed = Math.max(totalConfirmedEstimate - totalConfirmedDeposits, 0);
+    const confirmedVendorCost = confirmedEvents.reduce((sum, event) => {
+      const eventVendorCost = (event.vendorIds ?? []).reduce(
+        (vendorSum, vendorId) => vendorSum + (vendorCostMap.get(vendorId) ?? 0),
+        0
+      );
+      return sum + eventVendorCost;
+    }, 0);
+    const confirmedAfterVendorCost = Math.max(pipelineConfirmed - confirmedVendorCost, 0);
+    const pipelineProposed = data.events
+      .filter((event) => event.status !== "confirmed")
+      .reduce((sum, event) => sum + (event.estimate ?? 0), 0);
     const pipeline = CLIENT_PIPELINE.map((column) => ({
       ...column,
       items: data.clients.filter((client) => client.status === column.id),
@@ -687,10 +715,10 @@ export default function HomePage() {
 
     return {
       totalClients: data.clients.length,
-      activeClients: activeClients.length,
-      bookedRevenue,
-      outstandingInvoices,
       pipeline,
+      pipelineConfirmed,
+      pipelineProposed,
+      confirmedAfterVendorCost,
       upcomingEvents,
       heldDeposits: heldDeposits.total,
       heldDepositCount: heldDeposits.count,
@@ -897,38 +925,38 @@ export default function HomePage() {
           </TabsList>
 
           <TabsContent value="overview" className="space-y-6">
-            <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
               <Card className="bg-card/90">
-                <CardHeader className="pb-2">
-                  <CardDescription>Active clients</CardDescription>
-                  <CardTitle className="text-3xl font-semibold">
-                    {overview.activeClients}
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="text-xs text-muted-foreground">
-                  {overview.totalClients} total relationships tracked
-                </CardContent>
-              </Card>
-              <Card className="bg-card/90">
-                <CardHeader className="pb-2">
+                <CardHeader className="pb-2 space-y-3">
                   <CardDescription>Pipeline value</CardDescription>
-                  <CardTitle className="text-3xl font-semibold">
-                    {formatCurrency(overview.bookedRevenue)}
-                  </CardTitle>
+                  <div className="flex flex-wrap gap-6">
+                    <div className="space-y-1">
+                      <p className="text-xs uppercase tracking-wide text-muted-foreground">Confirmed</p>
+                      <p className="text-3xl font-semibold text-foreground">
+                        {formatCurrency(overview.pipelineConfirmed)}
+                      </p>
+                    </div>
+                    <div className="space-y-1">
+                      <p className="text-xs uppercase tracking-wide text-muted-foreground">Proposed</p>
+                      <p className="text-3xl font-semibold text-foreground">
+                        {formatCurrency(overview.pipelineProposed)}
+                      </p>
+                    </div>
+                  </div>
                 </CardHeader>
                 <CardContent className="text-xs text-muted-foreground">
-                  Sum of budgets for booked + planning events
+                  Confirmed reflects signed work minus collected deposits. Proposed totals active bids and outreach.
                 </CardContent>
               </Card>
               <Card className="bg-card/90">
                 <CardHeader className="pb-2">
-                  <CardDescription>Outstanding invoices</CardDescription>
+                  <CardDescription>Confirmed after vendor cost</CardDescription>
                   <CardTitle className="text-3xl font-semibold">
-                    {formatCurrency(overview.outstandingInvoices)}
+                    {formatCurrency(overview.confirmedAfterVendorCost)}
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="text-xs text-muted-foreground">
-                  Awaiting payment from confirmed clients
+                  Projects margin once vendor commitments are covered.
                 </CardContent>
               </Card>
               <Card className="bg-primary text-primary-foreground">
@@ -998,6 +1026,15 @@ export default function HomePage() {
                                 onDragStart={(event) => handleDragStart(event, client.id)}
                                 onDragEnd={handleDragEnd}
                                 aria-grabbed={draggingClientId === client.id}
+                                role="button"
+                                tabIndex={0}
+                                onClick={() => handleClientEditRequest(client.id)}
+                                onKeyDown={(event) => {
+                                  if (event.key === "Enter" || event.key === " ") {
+                                    event.preventDefault();
+                                    handleClientEditRequest(client.id);
+                                  }
+                                }}
                               >
                                 <div className="flex items-center justify-between">
                                   <p className="font-medium text-foreground">{client.name}</p>
@@ -1176,6 +1213,9 @@ export default function HomePage() {
                     const assignedVendors = (event.vendorIds ?? [])
                       .map((vendorId) => vendorMap.get(vendorId) ?? null)
                       .filter((vendor): vendor is Vendor => Boolean(vendor));
+                    const vendorSummary = assignedVendors
+                      .map((vendor) => `${vendor.name} (${formatCurrency(vendor.cost ?? 0)})`)
+                      .join(", ");
                     return (
                       <button
                         key={event.id}
@@ -1216,7 +1256,7 @@ export default function HomePage() {
                         )}
                         {assignedVendors.length > 0 && (
                           <p className="text-xs text-muted-foreground">
-                            Vendors · {assignedVendors.map((vendor) => vendor.name).join(", ")}
+                            Vendors · {vendorSummary}
                           </p>
                         )}
                         {event.timeline && (
@@ -1298,7 +1338,7 @@ export default function HomePage() {
           </TabsContent>
 
           <TabsContent value="records" className="space-y-8">
-            <Tabs defaultValue="clients" className="space-y-6">
+            <Tabs value={recordsTab} onValueChange={handleRecordsTabChange} className="space-y-6">
               <TabsList className="flex w-full flex-wrap gap-2 bg-muted/70 p-2 text-xs sm:text-sm">
                 <TabsTrigger value="clients">Clients</TabsTrigger>
                 <TabsTrigger value="events">Events</TabsTrigger>
@@ -1467,7 +1507,11 @@ export default function HomePage() {
                         const assignedVendors = (event.vendorIds ?? [])
                           .map((vendorId) => vendorMap.get(vendorId) ?? null)
                           .filter((vendor): vendor is Vendor => Boolean(vendor));
+                        const vendorSummary = assignedVendors
+                          .map((vendor) => `${vendor.name} (${formatCurrency(vendor.cost ?? 0)})`)
+                          .join(", ");
                         const isSelected = selectedEventIds.includes(event.id);
+
                         return (
                           <div
                             key={event.id}
@@ -1531,7 +1575,7 @@ export default function HomePage() {
                             )}
                             {assignedVendors.length > 0 && (
                               <p className="text-xs text-muted-foreground">
-                                Vendors · {assignedVendors.map((vendor) => vendor.name).join(", ")}
+                                Vendors · {vendorSummary}
                               </p>
                             )}
                             {event.timeline && (
@@ -1653,6 +1697,7 @@ export default function HomePage() {
                       ) : (
                         filteredVendors.map((vendor) => {
                           const isSelected = selectedVendorIds.includes(vendor.id);
+
                           return (
                             <div
                               key={vendor.id}
@@ -1672,7 +1717,10 @@ export default function HomePage() {
                                   />
                                   <div>
                                     <h3 className="text-base font-semibold text-foreground">{vendor.name}</h3>
-                                    <p className="text-xs text-muted-foreground">{vendor.service}</p>
+                                    <p className="text-xs text-muted-foreground">
+                                      {vendor.service}
+                                      {typeof vendor.cost === "number" && ` · ${formatCurrency(vendor.cost)}`}
+                                    </p>
                                   </div>
                                 </div>
                                 <div className="flex flex-wrap items-center gap-2">
