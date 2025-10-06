@@ -1,8 +1,9 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ChangeEvent, ClipboardEvent, DragEvent, KeyboardEvent } from "react";
-import { Apple, Globe, Mail, Phone, Search, Sparkles } from "lucide-react";
+import { Apple, ExternalLink, Globe, Mail, Phone, Search, Sparkles } from "lucide-react";
 import { ClientForm } from "@/components/crm/client-form";
 import { EventForm } from "@/components/crm/event-form";
 import { InvoiceForm } from "@/components/crm/invoice-form";
@@ -21,7 +22,7 @@ import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useCrmData } from "@/hooks/use-crm-data";
 import { formatCurrency, formatDate } from "@/lib/format";
-import type { Client, Event as EventRecord, Invoice, Vendor } from "@/types/crm";
+import type { Client, Event as EventRecord, Invoice, InvoiceWixStatus, Vendor } from "@/types/crm";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/components/auth/auth-provider";
 
@@ -37,6 +38,29 @@ const invoiceStatusStyles: Record<Invoice["status"], string> = {
   sent: "bg-secondary text-secondary-foreground",
   paid: "bg-emerald-100 text-emerald-700",
   overdue: "bg-destructive/20 text-destructive",
+};
+
+const wixStatusCopy: Record<InvoiceWixStatus, { label: string; description: string; badge: string }> = {
+  not_created: {
+    label: "Not connected",
+    description: "Generate a Wix invoice to sync billing.",
+    badge: "bg-muted text-muted-foreground",
+  },
+  generated: {
+    label: "Draft in Wix",
+    description: "Invoice draft saved in Wix Billing.",
+    badge: "bg-sky-100 text-sky-700",
+  },
+  sent: {
+    label: "Sent via Wix",
+    description: "Invoice delivered through Wix with payment tracking.",
+    badge: "bg-secondary text-secondary-foreground",
+  },
+  paid: {
+    label: "Paid in Wix",
+    description: "Payment collected in Wix and synced here.",
+    badge: "bg-emerald-100 text-emerald-700",
+  },
 };
 
 const clientStatusLabels: Record<Client["status"], string> = {
@@ -74,6 +98,9 @@ export default function HomePage() {
     addInvoice,
     updateInvoice,
     deleteInvoice,
+    generateWixInvoice,
+    sendWixInvoice,
+    collectWixPayment,
   } = useCrmData();
   const [activeTab, setActiveTab] = useState("overview");
   const [vendorSearch, setVendorSearch] = useState("");
@@ -488,6 +515,18 @@ export default function HomePage() {
     }
     deleteInvoice(id);
     setEditingInvoiceId((current) => (current === id ? null : current));
+  };
+
+  const handleGenerateWixInvoice = (invoiceId: string) => {
+    generateWixInvoice(invoiceId);
+  };
+
+  const handleSendWixInvoice = (invoiceId: string) => {
+    sendWixInvoice(invoiceId);
+  };
+
+  const handleCollectWixPayment = (invoiceId: string) => {
+    collectWixPayment(invoiceId);
   };
 
   const overview = useMemo(() => {
@@ -1471,6 +1510,11 @@ export default function HomePage() {
                 <CardContent className="space-y-3">
                   {data.invoices.map((invoice) => {
                     const client = clientMap.get(invoice.clientId);
+                    const wixStatus = (invoice.wix?.status ?? "not_created") as InvoiceWixStatus;
+                    const wixMeta = wixStatusCopy[wixStatus];
+                    const wixLastUpdated = invoice.wix?.lastActionAt
+                      ? formatDate(invoice.wix.lastActionAt)
+                      : null;
                     return (
                       <div key={invoice.id} className="space-y-3 rounded-xl border border-border/80 bg-muted/40 p-4">
                         <div className="flex flex-wrap items-center justify-between gap-3">
@@ -1520,6 +1564,67 @@ export default function HomePage() {
                             </li>
                           ))}
                         </ul>
+                        <div className="rounded-lg border border-dashed border-primary/40 bg-primary/5 p-3">
+                          <div className="flex flex-wrap items-start justify-between gap-3">
+                            <div className="space-y-1">
+                              <p className="text-sm font-semibold text-foreground">Wix billing</p>
+                              <p className="text-xs text-muted-foreground">
+                                {wixMeta.description}
+                                {wixLastUpdated && (
+                                  <span className="block">Last updated {wixLastUpdated}</span>
+                                )}
+                              </p>
+                              {invoice.wix?.invoiceId && (
+                                <p className="text-xs text-muted-foreground">
+                                  Wix invoice ID: {invoice.wix.invoiceId}
+                                </p>
+                              )}
+                            </div>
+                            <Badge className={`${wixMeta.badge} whitespace-nowrap`}>{wixMeta.label}</Badge>
+                          </div>
+                          <div className="mt-3 flex flex-wrap items-center gap-2">
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="secondary"
+                              onClick={() => handleGenerateWixInvoice(invoice.id)}
+                            >
+                              {invoice.wix?.invoiceId ? "Regenerate Wix invoice" : "Generate Wix invoice"}
+                            </Button>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              onClick={() => handleSendWixInvoice(invoice.id)}
+                              disabled={wixStatus === "not_created"}
+                            >
+                              Send via Wix
+                            </Button>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="ghost"
+                              className="text-primary hover:text-primary"
+                              onClick={() => handleCollectWixPayment(invoice.id)}
+                              disabled={wixStatus !== "sent"}
+                            >
+                              Collect payment in Wix
+                            </Button>
+                            {invoice.wix?.paymentLink && (
+                              <Button asChild size="sm" variant="link" className="pl-0 text-primary">
+                                <Link
+                                  href={invoice.wix.paymentLink}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="inline-flex items-center gap-1"
+                                >
+                                  <ExternalLink className="h-4 w-4" />
+                                  View in Wix
+                                </Link>
+                              </Button>
+                            )}
+                          </div>
+                        </div>
                       </div>
                     );
                   })}

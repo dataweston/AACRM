@@ -4,7 +4,15 @@ import { useEffect, useState } from "react";
 import { nanoid } from "nanoid";
 
 import { sampleData } from "@/data/sample";
-import type { CRMData, Client, Event, Invoice, InvoiceItem, Vendor } from "@/types/crm";
+import type {
+  CRMData,
+  Client,
+  Event,
+  Invoice,
+  InvoiceItem,
+  InvoiceWixDetails,
+  Vendor,
+} from "@/types/crm";
 
 const STORAGE_KEY = "aacrm-storage-v1";
 
@@ -86,6 +94,13 @@ const normalizeEvent = (event: Omit<Event, "id">, vendors: Vendor[]): Omit<Event
   };
 };
 
+const ensureWixDetails = (wix?: InvoiceWixDetails): InvoiceWixDetails => ({
+  status: wix?.status ?? "not_created",
+  invoiceId: wix?.invoiceId,
+  paymentLink: wix?.paymentLink,
+  lastActionAt: wix?.lastActionAt,
+});
+
 export function useCrmData() {
   const [data, setData] = useState<CRMData>(sampleData);
   const [isHydrated, setIsHydrated] = useState(false);
@@ -96,7 +111,13 @@ export function useCrmData() {
     if (stored) {
       try {
         const parsed = JSON.parse(stored) as CRMData;
-        setData(parsed);
+        setData({
+          ...parsed,
+          invoices: parsed.invoices.map((invoice) => ({
+            ...invoice,
+            wix: ensureWixDetails(invoice.wix),
+          })),
+        });
       } catch (error) {
         console.warn("Failed to parse stored CRM data", error);
       }
@@ -183,15 +204,110 @@ export function useCrmData() {
       ...current,
       invoices: [
         {
-          ...withGeneratedId(invoice),
+          ...withGeneratedId({
+            ...invoice,
+            wix: ensureWixDetails(invoice.wix),
+          }),
           items: invoice.items.map(withInvoiceItemId),
         },
-        ...current.invoices,
+        ...current.invoices.map((entry) => ({
+          ...entry,
+          wix: ensureWixDetails(entry.wix),
+        })),
       ],
     }));
 
   const normalizeInvoiceItems = (items: InvoiceItemInput[]) =>
     items.map(withInvoiceItemId);
+
+  const buildWixInvoiceLink = (invoiceId: string) =>
+    `https://manage.wix.com/dashboard/business-tools/invoices/${invoiceId}`;
+
+  const generateWixInvoice = (invoiceId: string) =>
+    setData((current) => ({
+      ...current,
+      invoices: current.invoices.map((entry) => {
+        if (entry.id !== invoiceId) {
+          return {
+            ...entry,
+            wix: ensureWixDetails(entry.wix),
+          };
+        }
+
+        const wix = ensureWixDetails(entry.wix);
+        const wixInvoiceId = wix.invoiceId ?? `wix-${invoiceId}-${nanoid(6)}`;
+        const paymentLink = wix.paymentLink ?? buildWixInvoiceLink(wixInvoiceId);
+
+        return {
+          ...entry,
+          wix: {
+            ...wix,
+            invoiceId: wixInvoiceId,
+            paymentLink,
+            status: "generated",
+            lastActionAt: new Date().toISOString(),
+          },
+        };
+      }),
+    }));
+
+  const sendWixInvoice = (invoiceId: string) =>
+    setData((current) => ({
+      ...current,
+      invoices: current.invoices.map((entry) => {
+        if (entry.id !== invoiceId) {
+          return {
+            ...entry,
+            wix: ensureWixDetails(entry.wix),
+          };
+        }
+
+        const wix = ensureWixDetails(entry.wix);
+        const wixInvoiceId = wix.invoiceId ?? `wix-${invoiceId}-${nanoid(6)}`;
+        const paymentLink = wix.paymentLink ?? buildWixInvoiceLink(wixInvoiceId);
+
+        return {
+          ...entry,
+          status: entry.status === "paid" ? entry.status : "sent",
+          wix: {
+            ...wix,
+            invoiceId: wixInvoiceId,
+            paymentLink,
+            status: "sent",
+            lastActionAt: new Date().toISOString(),
+          },
+        };
+      }),
+    }));
+
+  const collectWixPayment = (invoiceId: string) =>
+    setData((current) => ({
+      ...current,
+      invoices: current.invoices.map((entry) => {
+        if (entry.id !== invoiceId) {
+          return {
+            ...entry,
+            wix: ensureWixDetails(entry.wix),
+          };
+        }
+
+        const wix = ensureWixDetails(entry.wix);
+        const wixInvoiceId = wix.invoiceId ?? `wix-${invoiceId}-${nanoid(6)}`;
+        const paymentLink = wix.paymentLink ?? buildWixInvoiceLink(wixInvoiceId);
+
+        return {
+          ...entry,
+          status: "paid",
+          wix: {
+            ...wix,
+            invoiceId: wixInvoiceId,
+            paymentLink,
+            status: "paid",
+            lastActionAt: new Date().toISOString(),
+          },
+        };
+      }),
+    }));
 
   const updateInvoice = (invoiceId: string, invoice: Omit<Invoice, "id">) =>
     setData((current) => ({
@@ -203,8 +319,12 @@ export function useCrmData() {
               ...invoice,
               id: invoiceId,
               items: normalizeInvoiceItems(invoice.items),
+              wix: ensureWixDetails(invoice.wix ?? entry.wix),
             }
-          : entry
+          : {
+              ...entry,
+              wix: ensureWixDetails(entry.wix),
+            }
       ),
     }));
 
@@ -243,5 +363,8 @@ export function useCrmData() {
     addInvoice,
     updateInvoice,
     deleteInvoice,
+    generateWixInvoice,
+    sendWixInvoice,
+    collectWixPayment,
   };
 }

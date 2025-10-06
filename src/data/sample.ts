@@ -107,6 +107,13 @@ export const sampleData: CRMData = {
         { id: "item-2", description: "Vendor sourcing retainer", amount: 8000 },
       ],
       notes: "Payment due 15 days prior to gala load-in.",
+      wix: {
+        status: "sent",
+        invoiceId: "wix-1007",
+        paymentLink:
+          "https://manage.wix.com/dashboard/business-tools/invoices/invoice-1007",
+        lastActionAt: "2025-02-20T14:30:00.000Z",
+      },
     },
     {
       id: "invoice-1008",
@@ -120,6 +127,13 @@ export const sampleData: CRMData = {
         { id: "item-2", description: "Onsite coordination team", amount: 5600 },
       ],
       notes: "Paid via ACH on February 15.",
+      wix: {
+        status: "paid",
+        invoiceId: "wix-1008",
+        paymentLink:
+          "https://manage.wix.com/dashboard/business-tools/invoices/invoice-1008",
+        lastActionAt: "2025-02-15T09:10:00.000Z",
+      },
     },
   ],
 };
