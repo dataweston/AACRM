@@ -19,6 +19,7 @@ export interface Vendor {
   phone?: string;
   website?: string;
   preferredContact?: "email" | "phone" | "text";
+  cost?: number;
   notes?: string;
 }
 
