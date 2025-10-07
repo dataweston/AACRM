@@ -1104,6 +1104,151 @@ export default function HomePage() {
     </div>
   );
 
+  const renderClientImportPanel = () => (
+    <Card className="bg-card/90 shadow-sm">
+      <CardHeader className="space-y-2">
+        <CardTitle>Quick client import</CardTitle>
+        <CardDescription>Drop a text list or CSV export to populate your pipeline in seconds.</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div
+          className={cn(
+            "flex flex-col items-center justify-center gap-2 rounded-2xl border border-dashed border-border/60 bg-muted/30 p-6 text-center text-xs text-muted-foreground transition",
+            isImportDragActive && "border-primary/60 bg-primary/5 text-primary"
+          )}
+          role="button"
+          tabIndex={0}
+          aria-label="Import clients by pasting, dropping, or uploading text files"
+          onClick={handleImportZoneClick}
+          onKeyDown={handleImportZoneKeyDown}
+          onPaste={handleImportPaste}
+          onDragEnter={handleImportDragEnter}
+          onDragLeave={handleImportDragLeave}
+          onDragOver={handleImportDragOver}
+          onDrop={handleImportDrop}
+        >
+          <p className="text-sm font-medium text-foreground">Click or drop text to add clients</p>
+          <p className="max-w-md">
+            Paste, drop, or upload lines formatted like
+            <span className="mx-1 rounded bg-background px-1 py-0.5 font-mono text-[11px] text-foreground">
+              Name | Email | Phone | Status | Event Date | Budget | Notes
+            </span>
+            or choose a .txt/.csv file.
+          </p>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".txt,.csv,text/plain"
+            multiple
+            className="sr-only"
+            onChange={handleImportFileChange}
+          />
+        </div>
+        {importPreview && (
+          <div className="w-full space-y-4 rounded-2xl border border-border/70 bg-muted/20 p-4 text-left">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div className="space-y-1">
+                <h3 className="text-sm font-semibold text-foreground">Preview detected clients</h3>
+                <p className="text-xs text-muted-foreground">
+                  {importPreview.created.length > 0
+                    ? `Ready to add ${importPreview.created.length} client${
+                        importPreview.created.length === 1 ? "" : "s"
+                      }.`
+                    : "We couldn't identify any client rows yet. Adjust the text below or cancel the import."}
+                  {importPreview.sources.length > 0 && <span> Source: {importPreview.sources.join(", ")}</span>}
+                </p>
+                {importPreview.skipped.length > 0 && (
+                  <p className="text-xs text-muted-foreground">
+                    Skipped {importPreview.skipped.length} line{importPreview.skipped.length === 1 ? "" : "s"}. Review
+                    or edit them below before importing.
+                  </p>
+                )}
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Button type="button" size="sm" variant="ghost" onClick={handleImportPreviewCancel}>
+                  Cancel
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={handleImportPreviewConfirm}
+                  disabled={importPreview.created.length === 0}
+                >
+                  Import clients
+                </Button>
+              </div>
+            </div>
+            <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)]">
+              <div className="space-y-3">
+                <div className="space-y-2">
+                  <p className="text-xs font-medium text-muted-foreground">Preview sample</p>
+                  {importPreview.created.length === 0 ? (
+                    <p className="rounded-lg border border-dashed border-border/60 bg-background/60 p-3 text-[11px] text-muted-foreground">
+                      No importable rows detected yet.
+                    </p>
+                  ) : (
+                    <ul className="space-y-2 text-xs text-muted-foreground">
+                      {importPreview.created.slice(0, 5).map((client, index) => (
+                        <li
+                          key={`${client.name}-${client.email ?? "unknown"}-${index}`}
+                          className="flex flex-col gap-1 rounded-lg border border-border/60 bg-background/60 p-3"
+                        >
+                          <span className="text-sm font-semibold text-foreground">{client.name}</span>
+                          {client.email && <span>{client.email}</span>}
+                          {client.phone && <span>{client.phone}</span>}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                  {importPreview.created.length > 5 && (
+                    <p className="text-[11px] text-muted-foreground">
+                      +{importPreview.created.length - 5} more client{importPreview.created.length - 5 === 1 ? "" : "s"} detected.
+                    </p>
+                  )}
+                </div>
+                {importPreview.skipped.length > 0 && (
+                  <div className="space-y-2 rounded-lg border border-dashed border-border/60 bg-background/60 p-3">
+                    <p className="text-xs font-medium text-foreground">Lines to review</p>
+                    <ul className="space-y-1 text-[11px] font-mono text-muted-foreground/80">
+                      {importPreview.skipped.slice(0, 4).map((line, index) => (
+                        <li key={`skipped-${index}`} className="truncate">
+                          {line}
+                        </li>
+                      ))}
+                    </ul>
+                    {importPreview.skipped.length > 4 && (
+                      <p className="text-[11px] text-muted-foreground">
+                        +{importPreview.skipped.length - 4} additional line{importPreview.skipped.length - 4 === 1 ? "" : "s"} skipped.
+                      </p>
+                    )}
+                  </div>
+                )}
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="import-preview-text" className="text-xs font-medium text-muted-foreground">
+                  Adjust text before importing
+                </Label>
+                <Textarea
+                  id="import-preview-text"
+                  value={importPreviewText}
+                  onChange={(event) => handleImportPreviewTextChange(event.target.value)}
+                  className="min-h-[180px] font-mono text-xs"
+                />
+                <p className="text-[11px] text-muted-foreground">Changes update the preview automatically.</p>
+              </div>
+            </div>
+          </div>
+        )}
+        {(importSummary || importError) && (
+          <div className="space-y-1 text-xs">
+            {importSummary && <p className="text-foreground">{importSummary}</p>}
+            {importError && <p className="text-destructive">{importError}</p>}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+
 
   if (status === "loading") {
     return (
@@ -1200,8 +1345,8 @@ export default function HomePage() {
   }
 
   return (
-    <div className="min-h-screen bg-background">
-      <header className="border-b border-border/50 bg-background/80 backdrop-blur">
+    <div className="min-h-screen bg-[#fffaf4]">
+      <header className="border-b border-border/50 bg-[#fffaf4]/90 backdrop-blur">
         <div className="mx-auto flex w-full max-w-6xl flex-col gap-3 px-4 py-3 text-xs sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:text-sm">
           <div className="flex flex-col items-start gap-1 text-muted-foreground sm:flex-row sm:items-center sm:gap-3">
             <span className="font-semibold uppercase tracking-[0.35em] text-foreground">AACRM</span>
@@ -1220,30 +1365,53 @@ export default function HomePage() {
           </div>
         </div>
       </header>
-      <section className="border-b border-border/60 bg-[radial-gradient(circle_at_top,_#f9dfb1,_transparent_45%),_#fff]">
-        <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-4 py-10 sm:py-14">
-          <p className="text-3xl font-semibold lowercase tracking-tight text-foreground sm:text-4xl">
-            welcome, alyssa.
-          </p>
+      <section className="border-b border-border/60 bg-[radial-gradient(circle_at_top,_#ffe8c7,_transparent_52%),_#fffaf4]">
+        <div className="mx-auto w-full max-w-6xl px-4 py-10 sm:py-14">
+          <div className="grid gap-6 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1.3fr)] lg:items-start">
+            <div className="space-y-4">
+              <p className="text-3xl font-semibold lowercase tracking-tight text-foreground sm:text-4xl">
+                welcome, alyssa.
+              </p>
+              <p className="text-sm text-muted-foreground sm:text-base">
+                Send over that lead list and we'll prep their profiles while you keep planning.
+              </p>
+            </div>
+            {renderClientImportPanel()}
+          </div>
         </div>
       </section>
 
       <main className="mx-auto w-full max-w-6xl px-4 py-10 sm:py-12">
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-          <TabsList className="flex w-full flex-nowrap gap-2 overflow-x-auto bg-muted/70 p-2 text-xs sm:text-sm">
-            <TabsTrigger value="clients" className="flex-1 min-w-[92px] sm:min-w-[120px]">
+          <TabsList className="flex w-full flex-wrap gap-2 rounded-2xl bg-[#ffe8d1] p-2 text-[11px] font-medium uppercase tracking-wide text-muted-foreground shadow-sm sm:text-xs">
+            <TabsTrigger
+              value="clients"
+              className="flex-1 rounded-xl border border-transparent bg-white/80 px-3 py-2 text-center text-foreground transition hover:border-primary/40 hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 data-[state=active]:border-primary/60 data-[state=active]:bg-white data-[state=active]:text-primary sm:flex-none sm:px-4 sm:text-sm"
+            >
               Clients
             </TabsTrigger>
-            <TabsTrigger value="events" className="flex-1 min-w-[92px] sm:min-w-[120px]">
+            <TabsTrigger
+              value="events"
+              className="flex-1 rounded-xl border border-transparent bg-white/80 px-3 py-2 text-center text-foreground transition hover:border-primary/40 hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 data-[state=active]:border-primary/60 data-[state=active]:bg-white data-[state=active]:text-primary sm:flex-none sm:px-4 sm:text-sm"
+            >
               Events
             </TabsTrigger>
-            <TabsTrigger value="vendors" className="flex-1 min-w-[92px] sm:min-w-[120px]">
+            <TabsTrigger
+              value="vendors"
+              className="flex-1 rounded-xl border border-transparent bg-white/80 px-3 py-2 text-center text-foreground transition hover:border-primary/40 hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 data-[state=active]:border-primary/60 data-[state=active]:bg-white data-[state=active]:text-primary sm:flex-none sm:px-4 sm:text-sm"
+            >
               Vendors
             </TabsTrigger>
-            <TabsTrigger value="leads" className="flex-1 min-w-[92px] sm:min-w-[120px]">
+            <TabsTrigger
+              value="leads"
+              className="flex-1 rounded-xl border border-transparent bg-white/80 px-3 py-2 text-center text-foreground transition hover:border-primary/40 hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 data-[state=active]:border-primary/60 data-[state=active]:bg-white data-[state=active]:text-primary sm:flex-none sm:px-4 sm:text-sm"
+            >
               Leads
             </TabsTrigger>
-            <TabsTrigger value="billing" className="flex-1 min-w-[92px] sm:min-w-[120px]">
+            <TabsTrigger
+              value="billing"
+              className="flex-1 rounded-xl border border-transparent bg-white/80 px-3 py-2 text-center text-foreground transition hover:border-primary/40 hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 data-[state=active]:border-primary/60 data-[state=active]:bg-white data-[state=active]:text-primary sm:flex-none sm:px-4 sm:text-sm"
+            >
               Billing
             </TabsTrigger>
           </TabsList>
@@ -1939,141 +2107,6 @@ export default function HomePage() {
                         </div>
                       ))}
                     </div>
-                    <div
-                      className={cn(
-                        "flex flex-col items-center justify-center gap-2 rounded-2xl border border-dashed border-border/60 bg-muted/30 p-6 text-center text-xs text-muted-foreground transition",
-                        isImportDragActive && "border-primary/60 bg-primary/5 text-primary"
-                      )}
-                      role="button"
-                      tabIndex={0}
-                      aria-label="Import clients by pasting, dropping, or uploading text files"
-                      onClick={handleImportZoneClick}
-                      onKeyDown={handleImportZoneKeyDown}
-                      onPaste={handleImportPaste}
-                      onDragEnter={handleImportDragEnter}
-                      onDragLeave={handleImportDragLeave}
-                      onDragOver={handleImportDragOver}
-                      onDrop={handleImportDrop}
-                    >
-                      <p className="text-sm font-medium text-foreground">Click or drop text to add clients</p>
-                      <p className="max-w-md">
-                        Paste, drop, or upload lines formatted like
-                        <span className="mx-1 rounded bg-background px-1 py-0.5 font-mono text-[11px] text-foreground">
-                          Name | Email | Phone | Status | Event Date | Budget | Notes
-                        </span>
-                        or choose a .txt/.csv file.
-                      </p>
-                      <input
-                        ref={fileInputRef}
-                        type="file"
-                        accept=".txt,.csv,text/plain"
-                        multiple
-                        className="sr-only"
-                        onChange={handleImportFileChange}
-                      />
-                    </div>
-                    {importPreview && (
-                      <div className="w-full space-y-4 rounded-2xl border border-border/70 bg-muted/20 p-4 text-left">
-                        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                          <div className="space-y-1">
-                            <h3 className="text-sm font-semibold text-foreground">Preview detected clients</h3>
-                            <p className="text-xs text-muted-foreground">
-                              {importPreview.created.length > 0
-                                ? `Ready to add ${importPreview.created.length} client${
-                                    importPreview.created.length === 1 ? "" : "s"
-                                  }.`
-                                : "We couldn't identify any client rows yet. Adjust the text below or cancel the import."}
-                              {importPreview.sources.length > 0 && (
-                                <span> Source: {importPreview.sources.join(", ")}</span>
-                              )}
-                            </p>
-                            {importPreview.skipped.length > 0 && (
-                              <p className="text-xs text-muted-foreground">
-                                Skipped {importPreview.skipped.length} line{importPreview.skipped.length === 1 ? "" : "s"}. Review or edit them below before importing.
-                              </p>
-                            )}
-                          </div>
-                          <div className="flex flex-wrap gap-2">
-                            <Button type="button" size="sm" variant="ghost" onClick={handleImportPreviewCancel}>
-                              Cancel
-                            </Button>
-                            <Button
-                              type="button"
-                              size="sm"
-                              onClick={handleImportPreviewConfirm}
-                              disabled={importPreview.created.length === 0}
-                            >
-                              Import clients
-                            </Button>
-                          </div>
-                        </div>
-                        <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)]">
-                          <div className="space-y-3">
-                            <div className="space-y-2">
-                              <p className="text-xs font-medium text-muted-foreground">Preview sample</p>
-                              {importPreview.created.length === 0 ? (
-                                <p className="rounded-lg border border-dashed border-border/60 bg-background/60 p-3 text-[11px] text-muted-foreground">
-                                  No importable rows detected yet.
-                                </p>
-                              ) : (
-                                <ul className="space-y-2 text-xs text-muted-foreground">
-                                  {importPreview.created.slice(0, 5).map((client, index) => (
-                                    <li
-                                      key={`${client.name}-${client.email ?? "unknown"}-${index}`}
-                                      className="flex flex-col gap-1 rounded-lg border border-border/60 bg-background/60 p-3"
-                                    >
-                                      <span className="text-sm font-semibold text-foreground">{client.name}</span>
-                                      {client.email && <span>{client.email}</span>}
-                                      {client.phone && <span>{client.phone}</span>}
-                                    </li>
-                                  ))}
-                                </ul>
-                              )}
-                              {importPreview.created.length > 5 && (
-                                <p className="text-[11px] text-muted-foreground">
-                                  +{importPreview.created.length - 5} more client{importPreview.created.length - 5 === 1 ? "" : "s"} detected.
-                                </p>
-                              )}
-                            </div>
-                            {importPreview.skipped.length > 0 && (
-                              <div className="space-y-2 rounded-lg border border-dashed border-border/60 bg-background/60 p-3">
-                                <p className="text-xs font-medium text-foreground">Lines to review</p>
-                                <ul className="space-y-1 text-[11px] font-mono text-muted-foreground/80">
-                                  {importPreview.skipped.slice(0, 4).map((line, index) => (
-                                    <li key={`skipped-${index}`} className="truncate">
-                                      {line}
-                                    </li>
-                                  ))}
-                                </ul>
-                                {importPreview.skipped.length > 4 && (
-                                  <p className="text-[11px] text-muted-foreground">
-                                    +{importPreview.skipped.length - 4} additional line{importPreview.skipped.length - 4 === 1 ? "" : "s"} skipped.
-                                  </p>
-                                )}
-                              </div>
-                            )}
-                          </div>
-                          <div className="space-y-2">
-                            <Label htmlFor="import-preview-text" className="text-xs font-medium text-muted-foreground">
-                              Adjust text before importing
-                            </Label>
-                            <Textarea
-                              id="import-preview-text"
-                              value={importPreviewText}
-                              onChange={(event) => handleImportPreviewTextChange(event.target.value)}
-                              className="min-h-[180px] font-mono text-xs"
-                            />
-                            <p className="text-[11px] text-muted-foreground">Changes update the preview automatically.</p>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-                    {(importSummary || importError) && (
-                      <div className="space-y-1 text-xs">
-                        {importSummary && <p className="text-foreground">{importSummary}</p>}
-                        {importError && <p className="text-destructive">{importError}</p>}
-                      </div>
-                    )}
                   </CardContent>
                 </Card>
 
