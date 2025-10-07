@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { ChangeEvent, ClipboardEvent, DragEvent, KeyboardEvent } from "react";
 import Link from "next/link";
 import { ExternalLink, Globe, Mail, Phone, Search, Sparkles } from "lucide-react";
@@ -561,7 +561,7 @@ export default function HomePage() {
     const clones = selectedClientIds
       .map((id) => data.clients.find((c) => c.id === id))
       .filter((c): c is Client => Boolean(c))
-      .map(({ id: _id, ...rest }) => ({ ...rest } as Omit<Client, 'id'>));
+      .map(({ id: _unused, ...rest }) => ({ ...rest } as Omit<Client, "id">));
     clones.forEach((clone) => addClient(clone));
     // Keep selection cleared after duplication
     setSelectedClientIds([]);
@@ -587,7 +587,7 @@ export default function HomePage() {
     const clones = selectedEventIds
       .map((id) => data.events.find((e) => e.id === id))
       .filter((e): e is EventRecord => Boolean(e))
-      .map(({ id: _id, ...rest }) => ({ ...rest } as Omit<EventRecord, 'id'>));
+      .map(({ id: _unused, ...rest }) => ({ ...rest } as Omit<EventRecord, "id">));
     clones.forEach((clone) => addEvent(clone));
     setSelectedEventIds([]);
   };
@@ -612,7 +612,7 @@ export default function HomePage() {
     const clones = selectedVendorIds
       .map((id) => data.vendors.find((v) => v.id === id))
       .filter((v): v is Vendor => Boolean(v))
-      .map(({ id: _id, ...rest }) => ({ ...rest } as Omit<Vendor, 'id'>));
+      .map(({ id: _unused, ...rest }) => ({ ...rest } as Omit<Vendor, "id">));
     clones.forEach((clone) => addVendor(clone));
     setSelectedVendorIds([]);
   };
@@ -1373,7 +1373,7 @@ export default function HomePage() {
                 welcome, alyssa.
               </p>
               <p className="text-sm text-muted-foreground sm:text-base">
-                Send over that lead list and we'll prep their profiles while you keep planning.
+                Send over that lead list and we&#39;ll prep their profiles while you keep planning.
               </p>
             </div>
             {renderClientImportPanel()}
