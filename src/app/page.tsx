@@ -524,14 +524,24 @@ export default function HomePage() {
   const handleImportPreviewTextChange = (value: string) => {
     setImportPreviewText(value);
 
-    if (!value.trim()) {
-      setImportPreview((current) => (current ? { ...current, created: [], skipped: [] } : current));
+    const trimmed = value.trim();
+
+    if (!trimmed) {
+      setImportPreview(null);
+      setImportSummary(null);
+      setImportError(null);
       updateImportFeedback(0, 0);
       return;
     }
 
-    const { created, skipped } = parseClientsFromText(value);
-    setImportPreview((current) => (current ? { ...current, created, skipped } : current));
+    const { created, skipped } = parseClientsFromText(trimmed);
+    setImportPreview((current) => ({
+      created,
+      skipped,
+      sources: current?.sources ?? ["manual paste"],
+    }));
+    setImportSummary(null);
+    setImportError(null);
     updateImportFeedback(created.length, skipped.length);
   };
 
@@ -1032,7 +1042,7 @@ export default function HomePage() {
   };
 
   const renderRecordsToolbar = () => (
-    <div className="space-y-3">
+    <div className="relative z-10 space-y-3">
       <div className="flex flex-col gap-3 rounded-xl border border-border/60 bg-muted/40 p-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="relative w-full sm:max-w-sm">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -1056,7 +1066,7 @@ export default function HomePage() {
         </div>
       </div>
       {hasRecordsSearch && (
-        <div className="rounded-xl border border-border/60 bg-background/70 p-3">
+        <div className="relative rounded-xl border border-border/60 bg-background/70 p-3 shadow-sm">
           <div className="flex items-center justify-between text-xs text-muted-foreground">
             <span className="font-semibold uppercase tracking-wide">Live matches</span>
             <span>
@@ -1111,6 +1121,21 @@ export default function HomePage() {
         <CardDescription>Drop a text list or CSV export to populate your pipeline in seconds.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
+        <div className="flex flex-col gap-2 sm:hidden">
+          <Label htmlFor="mobile-client-import" className="text-xs font-medium text-muted-foreground">
+            Tap to paste your client list
+          </Label>
+          <Textarea
+            id="mobile-client-import"
+            placeholder="Long-press to paste clients from your clipboard"
+            value={importPreviewText}
+            onChange={(event) => handleImportPreviewTextChange(event.target.value)}
+            className="min-h-[140px] bg-background font-mono text-xs"
+          />
+          <p className="text-[11px] text-muted-foreground">
+            Paste names, emails, and other fields on separate lines to preview instantly.
+          </p>
+        </div>
         <div
           className={cn(
             "flex flex-col items-center justify-center gap-2 rounded-2xl border border-dashed border-border/60 bg-muted/30 p-6 text-center text-xs text-muted-foreground transition",
@@ -1372,9 +1397,6 @@ export default function HomePage() {
               <p className="text-3xl font-semibold lowercase tracking-tight text-foreground sm:text-4xl">
                 welcome, alyssa.
               </p>
-              <p className="text-sm text-muted-foreground sm:text-base">
-                Send over that lead list and we&#39;ll prep their profiles while you keep planning.
-              </p>
             </div>
             {renderClientImportPanel()}
           </div>
@@ -1383,7 +1405,7 @@ export default function HomePage() {
 
       <main className="mx-auto w-full max-w-6xl px-4 py-10 sm:py-12">
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-          <TabsList className="flex w-full flex-wrap gap-2 rounded-2xl bg-[#ffe8d1] p-2 text-[11px] font-medium uppercase tracking-wide text-muted-foreground shadow-sm sm:text-xs">
+          <TabsList className="relative z-10 flex w-full flex-wrap gap-2 rounded-2xl bg-[#ffe8d1] p-2 text-[11px] font-medium uppercase tracking-wide text-muted-foreground shadow-sm sm:text-xs">
             <TabsTrigger
               value="clients"
               className="flex-1 rounded-xl border border-transparent bg-white/80 px-3 py-2 text-center text-foreground transition hover:border-primary/40 hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 data-[state=active]:border-primary/60 data-[state=active]:bg-white data-[state=active]:text-primary sm:flex-none sm:px-4 sm:text-sm"
