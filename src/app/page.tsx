@@ -1015,59 +1015,6 @@ export default function HomePage() {
           </TabsList>
 
           <TabsContent value="overview" className="space-y-6">
-            <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-              <Card className="bg-card/90">
-                <CardHeader className="pb-2 space-y-3">
-                  <CardDescription>Pipeline value</CardDescription>
-                  <div className="flex flex-wrap gap-6">
-                    <div className="space-y-1">
-                      <p className="text-xs uppercase tracking-wide text-muted-foreground">Confirmed</p>
-                      <p className="text-3xl font-semibold text-foreground">
-                        {formatCurrency(overview.pipelineConfirmed)}
-                      </p>
-                    </div>
-                    <div className="space-y-1">
-                      <p className="text-xs uppercase tracking-wide text-muted-foreground">Proposed</p>
-                      <p className="text-3xl font-semibold text-foreground">
-                        {formatCurrency(overview.pipelineProposed)}
-                      </p>
-                    </div>
-                  </div>
-                </CardHeader>
-                <CardContent className="text-xs text-muted-foreground">
-                  Confirmed reflects signed work minus collected deposits. Proposed totals active bids and outreach.
-                </CardContent>
-              </Card>
-              <Card className="bg-card/90">
-                <CardHeader className="pb-2">
-                  <CardDescription>Confirmed after vendor cost</CardDescription>
-                  <CardTitle className="text-3xl font-semibold">
-                    {formatCurrency(overview.confirmedAfterVendorCost)}
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="text-xs text-muted-foreground">
-                  Projects margin once vendor commitments are covered.
-                </CardContent>
-              </Card>
-              <Card className="bg-primary text-primary-foreground">
-                <CardHeader className="pb-2">
-                  <CardDescription className="text-primary-foreground/80">
-                    Currently held deposits
-                  </CardDescription>
-                  <CardTitle className="text-3xl font-semibold">
-                    {formatCurrency(overview.heldDeposits)}
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="text-xs text-primary-foreground/80">
-                  {overview.heldDepositCount === 0
-                    ? "Mark deposits as received in event records to track retainers."
-                    : `${overview.heldDepositCount} deposit${
-                        overview.heldDepositCount === 1 ? "" : "s"
-                      } received across active events.`}
-                </CardContent>
-              </Card>
-            </section>
-
             <section className="grid gap-6 xl:grid-cols-[2fr_1fr]">
               <Card className="bg-card/90">
                 <CardHeader className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
@@ -1283,6 +1230,59 @@ export default function HomePage() {
                 </CardContent>
               </Card>
 
+            </section>
+
+            <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+              <Card className="bg-card/90">
+                <CardHeader className="pb-2 space-y-3">
+                  <CardDescription>Pipeline value</CardDescription>
+                  <div className="flex flex-wrap gap-6">
+                    <div className="space-y-1">
+                      <p className="text-xs uppercase tracking-wide text-muted-foreground">Confirmed</p>
+                      <p className="text-3xl font-semibold text-foreground">
+                        {formatCurrency(overview.pipelineConfirmed)}
+                      </p>
+                    </div>
+                    <div className="space-y-1">
+                      <p className="text-xs uppercase tracking-wide text-muted-foreground">Proposed</p>
+                      <p className="text-3xl font-semibold text-foreground">
+                        {formatCurrency(overview.pipelineProposed)}
+                      </p>
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent className="text-xs text-muted-foreground">
+                  Confirmed reflects signed work minus collected deposits. Proposed totals active bids and outreach.
+                </CardContent>
+              </Card>
+              <Card className="bg-card/90">
+                <CardHeader className="pb-2">
+                  <CardDescription>Confirmed after vendor cost</CardDescription>
+                  <CardTitle className="text-3xl font-semibold">
+                    {formatCurrency(overview.confirmedAfterVendorCost)}
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="text-xs text-muted-foreground">
+                  Projects margin once vendor commitments are covered.
+                </CardContent>
+              </Card>
+              <Card className="bg-primary text-primary-foreground">
+                <CardHeader className="pb-2">
+                  <CardDescription className="text-primary-foreground/80">
+                    Currently held deposits
+                  </CardDescription>
+                  <CardTitle className="text-3xl font-semibold">
+                    {formatCurrency(overview.heldDeposits)}
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="text-xs text-primary-foreground/80">
+                  {overview.heldDepositCount === 0
+                    ? "Mark deposits as received in event records to track retainers."
+                    : `${overview.heldDepositCount} deposit${
+                        overview.heldDepositCount === 1 ? "" : "s"
+                      } received across active events.`}
+                </CardContent>
+              </Card>
             </section>
 
             <section className="grid gap-6 lg:grid-cols-2">
