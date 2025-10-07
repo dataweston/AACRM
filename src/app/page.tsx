@@ -148,7 +148,6 @@ export default function HomePage() {
   } = useCrmData();
   const [activeTab, setActiveTab] = useState("records");
   const [vendorSearch, setVendorSearch] = useState("");
-  const [activeTab, setActiveTab] = useState("overview");
   const [recordsSearch, setRecordsSearch] = useState("");
   const [vendorServiceFilter, setVendorServiceFilter] = useState<string>("all");
   const [editingClientId, setEditingClientId] = useState<string | null>(null);
@@ -1099,6 +1098,7 @@ export default function HomePage() {
             <TabsTrigger value="records">Records</TabsTrigger>
             <TabsTrigger value="leads-arr">Leads and ARR</TabsTrigger>
             <TabsTrigger value="billing">Billing</TabsTrigger>
+          </TabsList>
           <TabsList className="flex w-full flex-nowrap gap-2 overflow-x-auto bg-muted/70 p-2 text-xs sm:text-sm">
             <TabsTrigger value="overview" className="flex-1 min-w-[92px] sm:min-w-[120px]">
               Overview
@@ -1164,6 +1164,7 @@ export default function HomePage() {
                 </CardContent>
               </Card>
             </section>
+          </TabsContent>
 
           <TabsContent value="overview" className="space-y-6">
             <section className="grid gap-6 xl:grid-cols-[2fr_1fr]">
