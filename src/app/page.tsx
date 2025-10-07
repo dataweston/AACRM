@@ -1614,6 +1614,7 @@ export default function HomePage() {
                 <TabsTrigger value="vendors" className="flex-1 min-w-[92px] sm:min-w-[110px]">
                   Vendors
                 </TabsTrigger>
+              </TabsList>
               <div className="flex flex-col gap-3 rounded-xl border border-border/60 bg-muted/40 p-4 sm:flex-row sm:items-center sm:justify-between">
                 <div className="relative w-full sm:max-w-sm">
                   <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -1651,68 +1652,72 @@ export default function HomePage() {
                     onCancel={() => setEditingClientId(null)}
                     onDelete={handleClientDelete}
                   />
-                  <Card className="bg-card/90">
-                    <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                      <div>
-                        <CardTitle>Client roster</CardTitle>
-                        <CardDescription>Recent activity and event context</CardDescription>
-                      </div>
-                      <div className="flex flex-col items-start gap-2 sm:items-end">
-                        <Badge variant="neutral">{data.clients.length} total</Badge>
-                        <div className="flex flex-wrap justify-start gap-2 sm:justify-end">
-                          {selectedClientIds.length > 0 && (
-                      <div className="flex flex-col items-end gap-2">
-                        <Badge variant="neutral">
-                          {filteredClients.length} of {data.clients.length} clients
-                        </Badge>
-                        <div className="flex flex-wrap justify-end gap-2">
-                          {selectedVisibleClientCount > 0 && (
-                            <Badge variant="outline" className="border-primary/40 text-primary">
-                              {selectedVisibleClientCount} selected
-                            </Badge>
-                          )}
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="outline"
-                            onClick={selectAllClients}
-                            disabled={filteredClients.length === 0 || selectedVisibleClientCount === filteredClients.length}
-                          >
-                            Select visible
-                          </Button>
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="ghost"
-                            className="text-destructive hover:text-destructive"
-                            onClick={deleteSelectedClients}
-                            disabled={selectedVisibleClientCount === 0}
-                          >
-                            Delete selected
-                          </Button>
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="ghost"
-                            onClick={duplicateSelectedClients}
-                            disabled={selectedVisibleClientCount === 0}
-                          >
-                            Duplicate
-                          </Button>
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="ghost"
-                            onClick={clearClientSelection}
-                            disabled={selectedVisibleClientCount === 0}
-                          >
-                            Clear
-                          </Button>
+                    <Card className="bg-card/90">
+                      <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                        <div>
+                          <CardTitle>Client roster</CardTitle>
+                          <CardDescription>Recent activity and event context</CardDescription>
                         </div>
-                      </div>
-                    </CardHeader>
-                    <CardContent className="space-y-3">
-                      {filteredClients.length === 0 ? (
+                        <div className="flex flex-col items-start gap-2 sm:items-end">
+                          <Badge variant="neutral">{data.clients.length} total</Badge>
+                          <div className="flex flex-wrap justify-start gap-2 sm:justify-end">
+                            <div className="flex flex-col items-end gap-2">
+                              <Badge variant="neutral">
+                                {filteredClients.length} of {data.clients.length} clients
+                              </Badge>
+                              <div className="flex flex-wrap justify-end gap-2">
+                                {selectedVisibleClientCount > 0 && (
+                                  <Badge variant="outline" className="border-primary/40 text-primary">
+                                    {selectedVisibleClientCount} selected
+                                  </Badge>
+                                )}
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={selectAllClients}
+                                  disabled={
+                                    filteredClients.length === 0 ||
+                                    selectedVisibleClientCount === filteredClients.length
+                                  }
+                                >
+                                  Select visible
+                                </Button>
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="ghost"
+                                  className="text-destructive hover:text-destructive"
+                                  onClick={deleteSelectedClients}
+                                  disabled={selectedVisibleClientCount === 0}
+                                >
+                                  Delete selected
+                                </Button>
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="ghost"
+                                  onClick={duplicateSelectedClients}
+                                  disabled={selectedVisibleClientCount === 0}
+                                >
+                                  Duplicate
+                                </Button>
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="ghost"
+                                  onClick={clearClientSelection}
+                                  disabled={selectedVisibleClientCount === 0}
+                                >
+                                  Clear
+                                </Button>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </CardHeader>
+                      <CardContent className="space-y-3">
+                        {filteredClients.length === 0 ? (
                         <p className="rounded-xl border border-dashed border-border/70 bg-muted/40 p-6 text-sm text-muted-foreground">
                           {data.clients.length === 0
                             ? "Add your first client to start tracking your pipeline."
@@ -1800,64 +1805,68 @@ export default function HomePage() {
                   />
                   <Card className="bg-card/90">
                     <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                      <div>
-                        <CardTitle>Production calendar</CardTitle>
-                        <CardDescription>Keep venues, leads, and status aligned</CardDescription>
-                      </div>
-                      <div className="flex flex-col items-start gap-2 sm:items-end">
-                        <Badge variant="neutral">{data.events.length} events</Badge>
-                        <div className="flex flex-wrap justify-start gap-2 sm:justify-end">
-                          {selectedEventIds.length > 0 && (
-                      <div className="flex flex-col items-end gap-2">
-                        <Badge variant="neutral">
-                          {filteredEvents.length} of {data.events.length} events
-                        </Badge>
-                        <div className="flex flex-wrap justify-end gap-2">
-                          {selectedVisibleEventCount > 0 && (
-                            <Badge variant="outline" className="border-primary/40 text-primary">
-                              {selectedVisibleEventCount} selected
-                            </Badge>
-                          )}
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="outline"
-                            onClick={selectAllEvents}
-                            disabled={filteredEvents.length === 0 || selectedVisibleEventCount === filteredEvents.length}
-                          >
-                            Select visible
-                          </Button>
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="ghost"
-                            className="text-destructive hover:text-destructive"
-                            onClick={deleteSelectedEvents}
-                            disabled={selectedVisibleEventCount === 0}
-                          >
-                            Delete selected
-                          </Button>
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="ghost"
-                            onClick={duplicateSelectedEvents}
-                            disabled={selectedVisibleEventCount === 0}
-                          >
-                            Duplicate
-                          </Button>
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="ghost"
-                            onClick={clearEventSelection}
-                            disabled={selectedVisibleEventCount === 0}
-                          >
-                            Clear
-                          </Button>
+                        <div>
+                          <CardTitle>Production calendar</CardTitle>
+                          <CardDescription>Keep venues, leads, and status aligned</CardDescription>
                         </div>
-                      </div>
-                    </CardHeader>
+                        <div className="flex flex-col items-start gap-2 sm:items-end">
+                          <Badge variant="neutral">{data.events.length} events</Badge>
+                          <div className="flex flex-wrap justify-start gap-2 sm:justify-end">
+                            <div className="flex flex-col items-end gap-2">
+                              <Badge variant="neutral">
+                                {filteredEvents.length} of {data.events.length} events
+                              </Badge>
+                              <div className="flex flex-wrap justify-end gap-2">
+                                {selectedVisibleEventCount > 0 && (
+                                  <Badge variant="outline" className="border-primary/40 text-primary">
+                                    {selectedVisibleEventCount} selected
+                                  </Badge>
+                                )}
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={selectAllEvents}
+                                  disabled={
+                                    filteredEvents.length === 0 ||
+                                    selectedVisibleEventCount === filteredEvents.length
+                                  }
+                                >
+                                  Select visible
+                                </Button>
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="ghost"
+                                  className="text-destructive hover:text-destructive"
+                                  onClick={deleteSelectedEvents}
+                                  disabled={selectedVisibleEventCount === 0}
+                                >
+                                  Delete selected
+                                </Button>
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="ghost"
+                                  onClick={duplicateSelectedEvents}
+                                  disabled={selectedVisibleEventCount === 0}
+                                >
+                                  Duplicate
+                                </Button>
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="ghost"
+                                  onClick={clearEventSelection}
+                                  disabled={selectedVisibleEventCount === 0}
+                                >
+                                  Clear
+                                </Button>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </CardHeader>
                     <CardContent className="space-y-3">
                       {filteredEvents.length === 0 ? (
                         <p className="rounded-xl border border-dashed border-border/70 bg-muted/40 p-6 text-sm text-muted-foreground">
@@ -2038,64 +2047,49 @@ export default function HomePage() {
                         </div>
                         <div className="w-full overflow-x-auto">
                           <div className="flex w-max items-center gap-2">
-                        <p className="text-xs text-muted-foreground sm:max-w-xs sm:text-sm">
-                          Use the search above or choose a service to narrow your vendor list.
-                        </p>
-                        <div className="flex flex-wrap items-center gap-2">
-                          <button
-                            type="button"
-                            onClick={() => setVendorServiceFilter("all")}
-                            className={cn(
-                              "flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-medium transition",
-                              vendorServiceFilter === "all"
-                                ? "border-primary/40 bg-primary/10 text-primary"
-                                : "border-border/60 bg-muted/40 text-muted-foreground hover:border-border/80 hover:text-foreground"
-                            )}
-                          >
-                            All
-                            <span className="rounded-full bg-background px-2 py-0.5 text-[10px] font-semibold text-muted-foreground">
-                              {data.vendors.length}
-                            </span>
-                          </button>
-                          {vendorServiceCounts.map(({ service, count }) => (
-                            <button
-                              type="button"
-                              onClick={() => setVendorServiceFilter("all")}
-                              className={cn(
-                                "flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-medium transition",
-                                vendorServiceFilter === "all"
-                                  ? "border-primary/40 bg-primary/10 text-primary"
-                                  : "border-border/60 bg-muted/40 text-muted-foreground hover:border-border/80 hover:text-foreground"
-                              )}
-                            >
-                              All
-                              <span className="rounded-full bg-background px-2 py-0.5 text-[10px] font-semibold text-muted-foreground">
-                                {data.vendors.length}
-                              </span>
-                            </button>
-                            {vendorServiceCounts.map(({ service, count }) => (
+                            <p className="text-xs text-muted-foreground sm:max-w-xs sm:text-sm">
+                              Use the search above or choose a service to narrow your vendor list.
+                            </p>
+                            <div className="flex flex-wrap items-center gap-2">
                               <button
-                                key={service}
                                 type="button"
-                                onClick={() => setVendorServiceFilter(service)}
+                                onClick={() => setVendorServiceFilter("all")}
                                 className={cn(
                                   "flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-medium transition",
-                                  vendorServiceFilter === service.toLowerCase()
+                                  vendorServiceFilter === "all"
                                     ? "border-primary/40 bg-primary/10 text-primary"
                                     : "border-border/60 bg-muted/40 text-muted-foreground hover:border-border/80 hover:text-foreground"
                                 )}
                               >
-                                {service}
+                                All
                                 <span className="rounded-full bg-background px-2 py-0.5 text-[10px] font-semibold text-muted-foreground">
-                                  {count}
+                                  {data.vendors.length}
                                 </span>
                               </button>
-                            ))}
-                            {hasVendorFilters && (
-                              <Button type="button" variant="ghost" size="sm" onClick={handleResetVendorFilters}>
-                                Clear filters
-                              </Button>
-                            )}
+                              {vendorServiceCounts.map(({ service, count }) => (
+                                <button
+                                  key={service}
+                                  type="button"
+                                  onClick={() => setVendorServiceFilter(service.toLowerCase())}
+                                  className={cn(
+                                    "flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-medium transition",
+                                    vendorServiceFilter === service.toLowerCase()
+                                      ? "border-primary/40 bg-primary/10 text-primary"
+                                      : "border-border/60 bg-muted/40 text-muted-foreground hover:border-border/80 hover:text-foreground"
+                                  )}
+                                >
+                                  {service}
+                                  <span className="rounded-full bg-background px-2 py-0.5 text-[10px] font-semibold text-muted-foreground">
+                                    {count}
+                                  </span>
+                                </button>
+                              ))}
+                              {hasVendorFilters && (
+                                <Button type="button" variant="ghost" size="sm" onClick={handleResetVendorFilters}>
+                                  Clear filters
+                                </Button>
+                              )}
+                            </div>
                           </div>
                         </div>
                       </div>
