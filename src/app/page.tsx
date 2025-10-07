@@ -97,6 +97,13 @@ type ImportPreviewState = {
   sources: string[];
 };
 
+type SearchSuggestion = {
+  id: string;
+  kind: "client" | "event" | "vendor";
+  title: string;
+  description?: string;
+};
+
 const detectUnsupportedFormat = (input: string): string | null => {
   const sample = input.trim();
   if (!sample) {
@@ -146,7 +153,7 @@ export default function HomePage() {
     sendWixInvoice,
     collectWixPayment,
   } = useCrmData();
-  const [activeTab, setActiveTab] = useState("records");
+  const [activeTab, setActiveTab] = useState("clients");
   const [vendorSearch, setVendorSearch] = useState("");
   const [recordsSearch, setRecordsSearch] = useState("");
   const [vendorServiceFilter, setVendorServiceFilter] = useState<string>("all");
@@ -154,15 +161,9 @@ export default function HomePage() {
   const [editingVendorId, setEditingVendorId] = useState<string | null>(null);
   const [editingEventId, setEditingEventId] = useState<string | null>(null);
   const [editingInvoiceId, setEditingInvoiceId] = useState<string | null>(null);
-  const [recordsTab, setRecordsTab] = useState<"clients" | "events" | "vendors">("clients");
   const [selectedClientIds, setSelectedClientIds] = useState<string[]>([]);
   const [selectedEventIds, setSelectedEventIds] = useState<string[]>([]);
   const [selectedVendorIds, setSelectedVendorIds] = useState<string[]>([]);
-  const handleRecordsTabChange = useCallback((value: string) => {
-    if (value === "clients" || value === "events" || value === "vendors") {
-      setRecordsTab(value);
-    }
-  }, []);
   const [isOffline, setIsOffline] = useState(false);
   const { session, status, signInWithGoogle, signOut } = useAuth();
   const [googleName, setGoogleName] = useState("");
@@ -279,15 +280,31 @@ export default function HomePage() {
   const handleEventEditRequest = (eventId: string) => {
     if (!eventId) return;
     setEditingEventId(eventId);
-    setRecordsTab("events");
-    setActiveTab("records");
+    setActiveTab("events");
   };
 
   const handleClientEditRequest = (clientId: string) => {
     if (!clientId) return;
     setEditingClientId(clientId);
-    setRecordsTab("clients");
-    setActiveTab("records");
+    setActiveTab("clients");
+  };
+
+  const handleVendorEditRequest = (vendorId: string) => {
+    if (!vendorId) return;
+    setEditingVendorId(vendorId);
+    setActiveTab("vendors");
+  };
+
+  const handleSearchSuggestionSelect = (suggestion: SearchSuggestion) => {
+    if (suggestion.kind === "client") {
+      handleClientEditRequest(suggestion.id);
+    } else if (suggestion.kind === "event") {
+      handleEventEditRequest(suggestion.id);
+    } else {
+      handleVendorEditRequest(suggestion.id);
+    }
+
+    setRecordsSearch("");
   };
 
   const isClientDrag = (event: DragEvent<HTMLElement>) => {
@@ -922,6 +939,52 @@ export default function HomePage() {
     });
   }, [data.vendors, recordsSearch, vendorServiceFilter]);
 
+  const hasRecordsSearch = recordsSearch.trim().length > 0;
+
+  const searchSuggestions = useMemo<SearchSuggestion[]>(() => {
+    if (!hasRecordsSearch) {
+      return [];
+    }
+
+    const suggestions: SearchSuggestion[] = [];
+
+    filteredClients.slice(0, 4).forEach((client) => {
+      suggestions.push({
+        id: client.id,
+        kind: "client",
+        title: client.name || client.email || "Untitled client",
+        description: client.email || client.phone || client.notes || undefined,
+      });
+    });
+
+    filteredEvents.slice(0, 3).forEach((event) => {
+      const client = clientMap.get(event.clientId);
+      const venueString =
+        event.venue && typeof event.venueCost === "number"
+          ? `${event.venue} (${formatCurrency(event.venueCost)})`
+          : event.venue || null;
+      suggestions.push({
+        id: event.id,
+        kind: "event",
+        title: event.name,
+        description:
+          [formatDate(event.date), venueString, client?.name].filter((value) => Boolean(value)).join(" | ") ||
+          undefined,
+      });
+    });
+
+    filteredVendors.slice(0, 3).forEach((vendor) => {
+      suggestions.push({
+        id: vendor.id,
+        kind: "vendor",
+        title: vendor.name,
+        description: vendor.service || vendor.email || vendor.phone || undefined,
+      });
+    });
+
+    return suggestions.slice(0, 8);
+  }, [clientMap, filteredClients, filteredEvents, filteredVendors, hasRecordsSearch]);
+
   useEffect(() => {
     setSelectedClientIds((current) =>
       current.filter((id) => filteredClients.some((client) => client.id === id))
@@ -957,7 +1020,6 @@ export default function HomePage() {
 
   const totalFilteredRecords = filteredClients.length + filteredEvents.length + filteredVendors.length;
   const totalRecords = data.clients.length + data.events.length + data.vendors.length;
-  const hasRecordsSearch = recordsSearch.trim().length > 0;
 
   const hasVendorFilters = useMemo(
     () => vendorServiceFilter !== "all" || hasRecordsSearch,
@@ -968,6 +1030,80 @@ export default function HomePage() {
     setRecordsSearch("");
     setVendorServiceFilter("all");
   };
+
+  const renderRecordsToolbar = () => (
+    <div className="space-y-3">
+      <div className="flex flex-col gap-3 rounded-xl border border-border/60 bg-muted/40 p-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="relative w-full sm:max-w-sm">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            value={recordsSearch}
+            onChange={(event) => setRecordsSearch(event.target.value)}
+            placeholder="Search contacts, events, vendors"
+            className="pl-9"
+            aria-label="Search records"
+          />
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <Badge variant="outline" className="border-primary/40 text-primary">
+            {totalFilteredRecords} of {totalRecords} records
+          </Badge>
+          {hasRecordsSearch && (
+            <Button type="button" size="sm" variant="ghost" onClick={() => setRecordsSearch("")}>
+              Clear search
+            </Button>
+          )}
+        </div>
+      </div>
+      {hasRecordsSearch && (
+        <div className="rounded-xl border border-border/60 bg-background/70 p-3">
+          <div className="flex items-center justify-between text-xs text-muted-foreground">
+            <span className="font-semibold uppercase tracking-wide">Live matches</span>
+            <span>
+              {searchSuggestions.length} result{searchSuggestions.length === 1 ? "" : "s"}
+            </span>
+          </div>
+          {searchSuggestions.length === 0 ? (
+            <p className="pt-3 text-xs text-muted-foreground">
+              Keep typing to surface matching clients, events, or vendors.
+            </p>
+          ) : (
+            <ul className="mt-3 space-y-2">
+              {searchSuggestions.map((suggestion) => {
+                const label =
+                  suggestion.kind === "client"
+                    ? "Client"
+                    : suggestion.kind === "event"
+                      ? "Event"
+                      : "Vendor";
+                return (
+                  <li key={`${suggestion.kind}-${suggestion.id}`}>
+                    <button
+                      type="button"
+                      onClick={() => handleSearchSuggestionSelect(suggestion)}
+                      className="w-full rounded-lg border border-border/50 bg-muted/30 px-3 py-2 text-left transition hover:border-primary/50 hover:bg-primary/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+                    >
+                      <div className="flex items-center justify-between gap-3">
+                        <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                          {label}
+                        </span>
+                        <span className="text-[11px] text-muted-foreground">Open</span>
+                      </div>
+                      <p className="text-sm font-medium text-foreground">{suggestion.title}</p>
+                      {suggestion.description && (
+                        <p className="text-xs text-muted-foreground">{suggestion.description}</p>
+                      )}
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </div>
+      )}
+    </div>
+  );
+
 
   if (status === "loading") {
     return (
@@ -1094,1035 +1230,141 @@ export default function HomePage() {
 
       <main className="mx-auto w-full max-w-6xl px-4 py-10 sm:py-12">
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-          <TabsList className="flex w-full flex-wrap justify-start gap-2 bg-muted/70 p-2 text-xs sm:text-sm">
-            <TabsTrigger value="records">Records</TabsTrigger>
-            <TabsTrigger value="leads-arr">Leads and ARR</TabsTrigger>
-            <TabsTrigger value="billing">Billing</TabsTrigger>
-          </TabsList>
           <TabsList className="flex w-full flex-nowrap gap-2 overflow-x-auto bg-muted/70 p-2 text-xs sm:text-sm">
-            <TabsTrigger value="overview" className="flex-1 min-w-[92px] sm:min-w-[120px]">
-              Overview
+            <TabsTrigger value="clients" className="flex-1 min-w-[92px] sm:min-w-[120px]">
+              Clients
             </TabsTrigger>
-            <TabsTrigger value="records" className="flex-1 min-w-[92px] sm:min-w-[120px]">
-              Records
+            <TabsTrigger value="events" className="flex-1 min-w-[92px] sm:min-w-[120px]">
+              Events
+            </TabsTrigger>
+            <TabsTrigger value="vendors" className="flex-1 min-w-[92px] sm:min-w-[120px]">
+              Vendors
+            </TabsTrigger>
+            <TabsTrigger value="leads" className="flex-1 min-w-[92px] sm:min-w-[120px]">
+              Leads
             </TabsTrigger>
             <TabsTrigger value="billing" className="flex-1 min-w-[92px] sm:min-w-[120px]">
               Billing
             </TabsTrigger>
           </TabsList>
 
-          <TabsContent value="leads-arr" className="space-y-6">
-            <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-              <Card className="bg-card/90">
-                <CardHeader className="pb-2 space-y-3">
-                  <CardDescription>Pipeline value</CardDescription>
-                  <div className="flex flex-wrap gap-6">
-                    <div className="space-y-1">
-                      <p className="text-xs uppercase tracking-wide text-muted-foreground">Confirmed</p>
-                      <p className="text-3xl font-semibold text-foreground">
-                        {formatCurrency(overview.pipelineConfirmed)}
-                      </p>
-                    </div>
-                    <div className="space-y-1">
-                      <p className="text-xs uppercase tracking-wide text-muted-foreground">Proposed</p>
-                      <p className="text-3xl font-semibold text-foreground">
-                        {formatCurrency(overview.pipelineProposed)}
-                      </p>
-                    </div>
-                  </div>
-                </CardHeader>
-                <CardContent className="text-xs text-muted-foreground">
-                  Confirmed reflects signed work minus collected deposits. Proposed totals active bids and outreach.
-                </CardContent>
-              </Card>
-              <Card className="bg-card/90">
-                <CardHeader className="pb-2">
-                  <CardDescription>Confirmed after vendor cost</CardDescription>
-                  <CardTitle className="text-3xl font-semibold">
-                    {formatCurrency(overview.confirmedAfterVendorCost)}
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="text-xs text-muted-foreground">
-                  Projects margin once vendor commitments are covered.
-                </CardContent>
-              </Card>
-              <Card className="bg-primary text-primary-foreground">
-                <CardHeader className="pb-2">
-                  <CardDescription className="text-primary-foreground/80">
-                    Currently held deposits
-                  </CardDescription>
-                  <CardTitle className="text-3xl font-semibold">
-                    {formatCurrency(overview.heldDeposits)}
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="text-xs text-primary-foreground/80">
-                  {overview.heldDepositCount === 0
-                    ? "Mark deposits as received in event records to track retainers."
-                    : `${overview.heldDepositCount} deposit${
-                        overview.heldDepositCount === 1 ? "" : "s"
-                      } received across active events.`}
-                </CardContent>
-              </Card>
-            </section>
-          </TabsContent>
-
-          <TabsContent value="overview" className="space-y-6">
-            <section className="grid gap-6 xl:grid-cols-[2fr_1fr]">
-              <Card className="bg-card/90">
-                <CardHeader className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                  <div>
-                    <CardTitle>Client pipeline</CardTitle>
-                    <CardDescription>
-                      Drag clients between stages or drop a text list to capture new leads in seconds.
-                    </CardDescription>
-                  </div>
-                  <Badge variant="neutral">{overview.totalClients} in play</Badge>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-                    {overview.pipeline.map((column) => (
-                      <div
-                        key={column.id}
-                        className={cn(
-                          "space-y-3 rounded-2xl border border-border/70 bg-muted/40 p-4 transition",
-                          activeDropColumn === column.id &&
-                            "border-primary/70 bg-primary/5 shadow-sm"
-                        )}
-                        data-status={column.id}
-                        onDragEnter={(event) => handleColumnDragOver(event, column.id)}
-                        onDragOver={(event) => handleColumnDragOver(event, column.id)}
-                        onDragLeave={(event) => handleColumnDragLeave(event, column.id)}
-                        onDrop={(event) => handleColumnDrop(event, column.id)}
-                      >
-                        <div className="flex items-center justify-between text-sm font-semibold text-foreground">
-                          <span>{column.label}</span>
-                          <span className="text-xs text-muted-foreground">{column.items.length}</span>
-                        </div>
-                        {column.items.length === 0 ? (
-                          <p className="text-xs text-muted-foreground">
-                            No records yet. Drop a card here or import a client list below.
-                          </p>
-                        ) : (
-                          <div className="space-y-3">
-                            {column.items.map((client) => (
-                              <div
-                                key={client.id}
-                                className={cn(
-                                  "space-y-2 rounded-xl border border-border/70 bg-background/70 p-3 text-xs transition",
-                                  draggingClientId === client.id ? "opacity-50" : "hover:border-primary/50 hover:shadow-sm"
-                                )}
-                                draggable
-                                onDragStart={(event) => handleDragStart(event, client.id)}
-                                onDragEnd={handleDragEnd}
-                                aria-grabbed={draggingClientId === client.id}
-                                role="button"
-                                tabIndex={0}
-                                onClick={() => handleClientEditRequest(client.id)}
-                                onKeyDown={(event) => {
-                                  if (event.key === "Enter" || event.key === " ") {
-                                    event.preventDefault();
-                                    handleClientEditRequest(client.id);
-                                  }
-                                }}
-                              >
-                                <div className="flex items-center justify-between">
-                                  <p className="font-medium text-foreground">{client.name}</p>
-                                  <Badge className={cn("px-2 py-0.5 text-[10px] font-semibold", column.accent)}>
-                                    {clientStatusLabels[client.status]}
-                                  </Badge>
-                                </div>
-                                <div className="space-y-1 text-muted-foreground">
-                                  {client.eventDate && <p>Event · {formatDate(client.eventDate)}</p>}
-                                  {typeof client.budget === "number" && (
-                                    <p>Budget · {formatCurrency(client.budget)}</p>
-                                  )}
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                  <div
-                    className={cn(
-                      "flex flex-col items-center justify-center gap-2 rounded-2xl border border-dashed border-border/60 bg-muted/30 p-6 text-center text-xs text-muted-foreground transition",
-                      isImportDragActive && "border-primary/60 bg-primary/5 text-primary"
-                    )}
-                    role="button"
-                    tabIndex={0}
-                    aria-label="Import clients by pasting, dropping, or uploading text files"
-                    onClick={handleImportZoneClick}
-                    onKeyDown={handleImportZoneKeyDown}
-                    onPaste={handleImportPaste}
-                    onDragEnter={handleImportDragEnter}
-                    onDragLeave={handleImportDragLeave}
-                    onDragOver={handleImportDragOver}
-                    onDrop={handleImportDrop}
-                  >
-                    <p className="text-sm font-medium text-foreground">Click or drop text to add clients</p>
-                    <p className="max-w-md">
-                      Paste, drop, or upload lines formatted like
-                      <span className="mx-1 rounded bg-background px-1 py-0.5 font-mono text-[11px] text-foreground">
-                        Name | Email | Phone | Status | Event Date | Budget | Notes
-                      </span>
-                      or choose a .txt/.csv file.
-                    </p>
-                    <input
-                      ref={fileInputRef}
-                      type="file"
-                      accept=".txt,.csv,text/plain"
-                      multiple
-                      className="sr-only"
-                      onChange={handleImportFileChange}
-                    />
-                  </div>
-                  {importPreview && (
-                    <div className="w-full space-y-4 rounded-2xl border border-border/70 bg-muted/20 p-4 text-left">
-                      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                        <div className="space-y-1">
-                          <h3 className="text-sm font-semibold text-foreground">Preview detected clients</h3>
-                          <p className="text-xs text-muted-foreground">
-                            {importPreview.created.length > 0
-                              ? `Ready to add ${importPreview.created.length} client${
-                                  importPreview.created.length === 1 ? "" : "s"
-                                }.`
-                              : "We couldn't identify any client rows yet. Adjust the text below or cancel the import."}
-                            {importPreview.sources.length > 0 && (
-                              <span> Source: {importPreview.sources.join(", ")}</span>
-                            )}
-                          </p>
-                          {importPreview.skipped.length > 0 && (
-                            <p className="text-xs text-muted-foreground">
-                              Skipped {importPreview.skipped.length} line{importPreview.skipped.length === 1 ? "" : "s"}. Review or edit them below before importing.
-                            </p>
-                          )}
-                        </div>
-                        <div className="flex flex-wrap gap-2">
-                          <Button type="button" size="sm" variant="ghost" onClick={handleImportPreviewCancel}>
-                            Cancel
-                          </Button>
-                          <Button
-                            type="button"
-                            size="sm"
-                            onClick={handleImportPreviewConfirm}
-                            disabled={importPreview.created.length === 0}
-                          >
-                            Import clients
-                          </Button>
-                        </div>
-                      </div>
-                      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)]">
-                        <div className="space-y-3">
-                          <div className="space-y-2">
-                            <p className="text-xs font-medium text-muted-foreground">Preview sample</p>
-                            {importPreview.created.length === 0 ? (
-                              <p className="rounded-lg border border-dashed border-border/60 bg-background/60 p-3 text-[11px] text-muted-foreground">
-                                No importable rows detected yet.
-                              </p>
-                            ) : (
-                              <ul className="space-y-2 text-xs text-muted-foreground">
-                                {importPreview.created.slice(0, 5).map((client, index) => (
-                                  <li
-                                    key={`${client.name}-${client.email ?? "unknown"}-${index}`}
-                                    className="flex flex-col gap-1 rounded-lg border border-border/60 bg-background/60 p-3"
-                                  >
-                                    <span className="text-sm font-semibold text-foreground">{client.name}</span>
-                                    {client.email && <span>{client.email}</span>}
-                                    {client.phone && <span>{client.phone}</span>}
-                                  </li>
-                                ))}
-                              </ul>
-                            )}
-                            {importPreview.created.length > 5 && (
-                              <p className="text-[11px] text-muted-foreground">
-                                +{importPreview.created.length - 5} more client{importPreview.created.length - 5 === 1 ? "" : "s"} detected.
-                              </p>
-                            )}
-                          </div>
-                          {importPreview.skipped.length > 0 && (
-                            <div className="space-y-2 rounded-lg border border-dashed border-border/60 bg-background/60 p-3">
-                              <p className="text-xs font-medium text-foreground">Lines to review</p>
-                              <ul className="space-y-1 text-[11px] font-mono text-muted-foreground/80">
-                                {importPreview.skipped.slice(0, 4).map((line, index) => (
-                                  <li key={`skipped-${index}`} className="truncate">
-                                    {line}
-                                  </li>
-                                ))}
-                              </ul>
-                              {importPreview.skipped.length > 4 && (
-                                <p className="text-[11px] text-muted-foreground">
-                                  +{importPreview.skipped.length - 4} additional line{importPreview.skipped.length - 4 === 1 ? "" : "s"} skipped.
-                                </p>
-                              )}
-                            </div>
-                          )}
-                        </div>
-                        <div className="space-y-2">
-                          <Label htmlFor="import-preview-text" className="text-xs font-medium text-muted-foreground">
-                            Adjust text before importing
-                          </Label>
-                          <Textarea
-                            id="import-preview-text"
-                            value={importPreviewText}
-                            onChange={(event) => handleImportPreviewTextChange(event.target.value)}
-                            className="min-h-[180px] font-mono text-xs"
-                          />
-                          <p className="text-[11px] text-muted-foreground">Changes update the preview automatically.</p>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                  {(importSummary || importError) && (
-                    <div className="space-y-1 text-xs">
-                      {importSummary && <p className="text-foreground">{importSummary}</p>}
-                      {importError && <p className="text-destructive">{importError}</p>}
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-
-            </section>
-
-            <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-              <Card className="bg-card/90">
-                <CardHeader className="pb-2 space-y-3">
-                  <CardDescription>Pipeline value</CardDescription>
-                  <div className="flex flex-wrap gap-6">
-                    <div className="space-y-1">
-                      <p className="text-xs uppercase tracking-wide text-muted-foreground">Confirmed</p>
-                      <p className="text-3xl font-semibold text-foreground">
-                        {formatCurrency(overview.pipelineConfirmed)}
-                      </p>
-                    </div>
-                    <div className="space-y-1">
-                      <p className="text-xs uppercase tracking-wide text-muted-foreground">Proposed</p>
-                      <p className="text-3xl font-semibold text-foreground">
-                        {formatCurrency(overview.pipelineProposed)}
-                      </p>
-                    </div>
-                  </div>
-                </CardHeader>
-                <CardContent className="text-xs text-muted-foreground">
-                  Confirmed reflects signed work minus collected deposits. Proposed totals active bids and outreach.
-                </CardContent>
-              </Card>
-              <Card className="bg-card/90">
-                <CardHeader className="pb-2">
-                  <CardDescription>Confirmed after vendor cost</CardDescription>
-                  <CardTitle className="text-3xl font-semibold">
-                    {formatCurrency(overview.confirmedAfterVendorCost)}
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="text-xs text-muted-foreground">
-                  Projects margin once vendor commitments are covered.
-                </CardContent>
-              </Card>
-              <Card className="bg-primary text-primary-foreground">
-                <CardHeader className="pb-2">
-                  <CardDescription className="text-primary-foreground/80">
-                    Currently held deposits
-                  </CardDescription>
-                  <CardTitle className="text-3xl font-semibold">
-                    {formatCurrency(overview.heldDeposits)}
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="text-xs text-primary-foreground/80">
-                  {overview.heldDepositCount === 0
-                    ? "Mark deposits as received in event records to track retainers."
-                    : `${overview.heldDepositCount} deposit${
-                        overview.heldDepositCount === 1 ? "" : "s"
-                      } received across active events.`}
-                </CardContent>
-              </Card>
-            </section>
-
-            <section className="grid gap-6 lg:grid-cols-2">
-              <Card className="bg-card/90">
-                <CardHeader className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                  <div>
-                    <CardTitle>Upcoming events</CardTitle>
-                    <CardDescription>Timeline-ready snapshot of the next celebrations</CardDescription>
-                  </div>
-                  <Badge variant="neutral">{overview.upcomingEvents.length} scheduled</Badge>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  {overview.upcomingEvents.length === 0 && (
-                    <p className="text-sm text-muted-foreground">Add an event to populate your schedule.</p>
-                  )}
-                  {overview.upcomingEvents.map((event) => {
-                    const client = clientMap.get(event.clientId);
-                    const assignedVendorDetails = (event.vendorIds ?? [])
-                      .map((vendorId) => {
-                        const vendor = vendorMap.get(vendorId);
-                        if (!vendor) {
-                          return null;
-                        }
-
-                        return {
-                          vendor,
-                          cost: event.vendorCosts?.[vendorId],
-                        };
-                      })
-                      .filter(
-                        (entry): entry is { vendor: Vendor; cost: number | undefined } => entry !== null
-                      );
-                    const vendorSummaryParts: string[] = [];
-                    if (event.venue) {
-                      const venueCost = event.venueCost;
-                      vendorSummaryParts.push(
-                        `${event.venue}${
-                          typeof venueCost === "number" ? ` (${formatCurrency(venueCost)})` : ""
-                        }`
-                      );
-                    }
-                    vendorSummaryParts.push(
-                      ...assignedVendorDetails.map(({ vendor, cost }) =>
-                        `${vendor.name}${typeof cost === "number" ? ` (${formatCurrency(cost)})` : ""}`
-                      )
-                    );
-                    const vendorSummary = vendorSummaryParts.join(", ");
-                    return (
-                      <button
-                        key={event.id}
-                        type="button"
-                        onClick={() => handleEventEditRequest(event.id)}
-                        className={cn(
-                          "w-full space-y-2 rounded-xl border border-border/70 bg-muted/40 p-4 text-left",
-                          "transition hover:border-primary/60 hover:shadow-sm",
-                          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
-                        )}
-                      >
-                        <div className="flex flex-wrap items-center justify-between gap-2">
-                          <div>
-                            <h3 className="text-base font-semibold text-foreground">{event.name}</h3>
-                            <p className="text-xs uppercase tracking-wider text-muted-foreground">
-                              {formatDate(event.date)} · {event.venue}
-                            </p>
-                          </div>
-                          <Badge variant="neutral" className="capitalize">
-                            {eventStatusLabels[event.status]}
-                          </Badge>
-                        </div>
-                        <p className="text-xs text-muted-foreground">
-                          Lead planner · {event.coordinator || "Unassigned"}
-                        </p>
-                        {client && (
-                          <p className="text-xs text-muted-foreground">Client · {client.name}</p>
-                        )}
-                        {typeof event.estimate === "number" && (
-                          <p className="text-xs text-muted-foreground">
-                            Estimate · {formatCurrency(event.estimate)}
-                          </p>
-                        )}
-                        {typeof event.deposit === "number" && (
-                          <p className="text-xs text-muted-foreground">
-                            Deposit {event.depositPaid ? "received" : "due"} · {formatCurrency(event.deposit)}
-                          </p>
-                        )}
-                        {vendorSummary && (
-                          <p className="text-xs text-muted-foreground">
-                            Vendors · {vendorSummary}
-                          </p>
-                        )}
-                        {event.timeline && (
-                          <p className="text-xs text-muted-foreground/80">{event.timeline}</p>
-                        )}
-                      </button>
-                    );
-                  })}
-                </CardContent>
-              </Card>
-
-              <Card className="bg-card/90">
-                <CardHeader className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                  <div>
-                    <CardTitle>Recent invoices</CardTitle>
-                    <CardDescription>Track billing status at a glance</CardDescription>
-                  </div>
-                  <Button size="sm" variant="outline" onClick={() => setActiveTab("billing")}>
-                    Manage billing
-                  </Button>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  {overview.recentInvoices.length === 0 && (
-                    <p className="text-sm text-muted-foreground">
-                      Create your first invoice to see activity here.
-                    </p>
-                  )}
-                  {overview.recentInvoices.map((invoice) => {
-                    const client = clientMap.get(invoice.clientId);
-                    return (
-                      <div
-                        key={invoice.id}
-                        className="space-y-2 rounded-xl border border-border/70 bg-muted/40 p-4 text-sm"
-                      >
-                        <div className="flex flex-wrap items-center justify-between gap-2">
-                          <div>
-                            <p className="font-semibold text-foreground">Invoice {invoice.id}</p>
-                            <p className="text-xs text-muted-foreground">
-                              Issued {formatDate(invoice.issueDate)} · Due {formatDate(invoice.dueDate)}
-                            </p>
-                          </div>
-                          <div className="flex flex-wrap items-center gap-2">
-                            <Badge className={`${invoiceStatusStyles[invoice.status]} capitalize`}>
-                              {invoice.status}
-                            </Badge>
-                            <Button
-                              type="button"
-                              size="sm"
-                              variant="ghost"
-                              onClick={() => {
-                                setActiveTab("billing");
-                                setEditingInvoiceId(invoice.id);
-                              }}
-                            >
-                              Edit
-                            </Button>
-                            <Button
-                              type="button"
-                              size="sm"
-                              variant="ghost"
-                              className="text-destructive hover:text-destructive"
-                              onClick={() => handleInvoiceDelete(invoice.id)}
-                            >
-                              Delete
-                            </Button>
-                          </div>
-                        </div>
-                        <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
-                          {client && <span>{client.name}</span>}
-                          <span>Total {formatCurrency(invoice.total)}</span>
-                          <span>{invoice.items.length} line items</span>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </CardContent>
-              </Card>
-            </section>
-          </TabsContent>
-
-          <TabsContent value="records" className="space-y-8">
-            <Tabs value={recordsTab} onValueChange={handleRecordsTabChange} className="space-y-6">
-              <TabsList className="flex w-full flex-nowrap gap-2 overflow-x-auto bg-muted/70 p-2 text-xs sm:text-sm">
-                <TabsTrigger value="clients" className="flex-1 min-w-[92px] sm:min-w-[110px]">
-                  Clients
-                </TabsTrigger>
-                <TabsTrigger value="events" className="flex-1 min-w-[92px] sm:min-w-[110px]">
-                  Events
-                </TabsTrigger>
-                <TabsTrigger value="vendors" className="flex-1 min-w-[92px] sm:min-w-[110px]">
-                  Vendors
-                </TabsTrigger>
-              </TabsList>
-              <div className="flex flex-col gap-3 rounded-xl border border-border/60 bg-muted/40 p-4 sm:flex-row sm:items-center sm:justify-between">
-                <div className="relative w-full sm:max-w-sm">
-                  <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                  <Input
-                    value={recordsSearch}
-                    onChange={(event) => setRecordsSearch(event.target.value)}
-                    placeholder="Search contacts, events, vendors"
-                    className="pl-9"
-                    aria-label="Search records"
-                  />
-                </div>
-                <div className="flex flex-wrap items-center gap-2">
-                  <Badge variant="outline" className="border-primary/40 text-primary">
-                    {totalFilteredRecords} of {totalRecords} records
-                  </Badge>
-                  {hasRecordsSearch && (
-                    <Button type="button" size="sm" variant="ghost" onClick={() => setRecordsSearch("")}>
-                      Clear search
-                    </Button>
-                  )}
-                </div>
-              </div>
-              <TabsList className="flex w-full flex-wrap gap-2 bg-muted/70 p-2 text-xs sm:text-sm">
-                <TabsTrigger value="clients">Clients</TabsTrigger>
-                <TabsTrigger value="events">Events</TabsTrigger>
-                <TabsTrigger value="vendors">Vendors</TabsTrigger>
-              </TabsList>
-
-              <TabsContent value="clients" className="space-y-6">
-                <section className="grid gap-6 lg:grid-cols-[1fr_1.1fr]">
-                  <ClientForm
-                    mode={editingClient ? "edit" : "create"}
-                    initialClient={editingClient ?? undefined}
-                    onSubmit={handleClientSubmit}
-                    onCancel={() => setEditingClientId(null)}
-                    onDelete={handleClientDelete}
-                  />
-                    <Card className="bg-card/90">
-                      <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                        <div>
-                          <CardTitle>Client roster</CardTitle>
-                          <CardDescription>Recent activity and event context</CardDescription>
-                        </div>
-                        <div className="flex flex-col items-start gap-2 sm:items-end">
-                          <Badge variant="neutral">{data.clients.length} total</Badge>
-                          <div className="flex flex-wrap justify-start gap-2 sm:justify-end">
-                            <div className="flex flex-col items-end gap-2">
-                              <Badge variant="neutral">
-                                {filteredClients.length} of {data.clients.length} clients
-                              </Badge>
-                              <div className="flex flex-wrap justify-end gap-2">
-                                {selectedVisibleClientCount > 0 && (
-                                  <Badge variant="outline" className="border-primary/40 text-primary">
-                                    {selectedVisibleClientCount} selected
-                                  </Badge>
-                                )}
-                                <Button
-                                  type="button"
-                                  size="sm"
-                                  variant="outline"
-                                  onClick={selectAllClients}
-                                  disabled={
-                                    filteredClients.length === 0 ||
-                                    selectedVisibleClientCount === filteredClients.length
-                                  }
-                                >
-                                  Select visible
-                                </Button>
-                                <Button
-                                  type="button"
-                                  size="sm"
-                                  variant="ghost"
-                                  className="text-destructive hover:text-destructive"
-                                  onClick={deleteSelectedClients}
-                                  disabled={selectedVisibleClientCount === 0}
-                                >
-                                  Delete selected
-                                </Button>
-                                <Button
-                                  type="button"
-                                  size="sm"
-                                  variant="ghost"
-                                  onClick={duplicateSelectedClients}
-                                  disabled={selectedVisibleClientCount === 0}
-                                >
-                                  Duplicate
-                                </Button>
-                                <Button
-                                  type="button"
-                                  size="sm"
-                                  variant="ghost"
-                                  onClick={clearClientSelection}
-                                  disabled={selectedVisibleClientCount === 0}
-                                >
-                                  Clear
-                                </Button>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      </CardHeader>
-                      <CardContent className="space-y-3">
-                        {filteredClients.length === 0 ? (
-                        <p className="rounded-xl border border-dashed border-border/70 bg-muted/40 p-6 text-sm text-muted-foreground">
-                          {data.clients.length === 0
-                            ? "Add your first client to start tracking your pipeline."
-                            : hasRecordsSearch
-                                ? "No clients match your search right now. Try a different name, email, or note keyword."
-                                : "No clients to display."}
-                        </p>
-                      ) : (
-                        filteredClients.map((client) => {
-                          const isSelected = selectedClientIds.includes(client.id);
-                          return (
-                            <div
-                              key={client.id}
-                              className={cn(
-                                "space-y-3 rounded-xl border border-border/80 bg-muted/40 p-4",
-                                isSelected && "border-primary/60 bg-primary/5"
-                              )}
-                            >
-                              <div className="flex flex-wrap items-start justify-between gap-3">
-                                <div className="flex items-start gap-3">
-                                  <input
-                                    type="checkbox"
-                                    aria-label={`Select ${client.name}`}
-                                    checked={isSelected}
-                                    onChange={() => toggleClientSelection(client.id)}
-                                    className="mt-1 h-4 w-4 rounded border border-border text-primary accent-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 focus-visible:ring-offset-0"
-                                  />
-                                  <div>
-                                    <h3 className="text-base font-semibold text-foreground">{client.name}</h3>
-                                    <p className="text-xs text-muted-foreground">{client.email}</p>
-                                  </div>
-                                </div>
-                                <div className="flex flex-wrap items-center gap-2">
-                                  <Badge className="capitalize bg-primary/10 text-primary">
-                                    {clientStatusLabels[client.status]}
-                                  </Badge>
-                                  <Button
-                                    type="button"
-                                    size="sm"
-                                    variant="ghost"
-                                    onClick={() => setEditingClientId(client.id)}
-                                  >
-                                    Edit
-                                  </Button>
-                                  <Button
-                                    type="button"
-                                    size="sm"
-                                    variant="ghost"
-                                    className="text-destructive hover:text-destructive"
-                                    onClick={() => handleClientDelete(client.id)}
-                                  >
-                                    Delete
-                                  </Button>
-                                </div>
-                              </div>
-                              <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
-                                {client.phone && <span>{client.phone}</span>}
-                                {client.eventDate && <span>Event · {formatDate(client.eventDate)}</span>}
-                                {typeof client.budget === "number" && (
-                                  <span>Budget · {formatCurrency(client.budget)}</span>
-                                )}
-                              </div>
-                              {client.notes && (
-                                <p className="text-sm text-muted-foreground/90">{client.notes}</p>
-                              )}
-                            </div>
-                          );
-                        })
-                      )}
-                    </CardContent>
-                  </Card>
-                </section>
-              </TabsContent>
-
-              <TabsContent value="events" className="space-y-6">
-                <section className="grid gap-6 lg:grid-cols-[1fr_1.1fr]">
-                  <EventForm
-                    mode={editingEvent ? "edit" : "create"}
-                    initialEvent={editingEvent ?? undefined}
-                    onSubmit={handleEventSubmit}
-                    onCancel={() => setEditingEventId(null)}
-                    onDelete={handleEventDelete}
-                    clients={data.clients}
-                    vendors={data.vendors}
-                  />
-                  <Card className="bg-card/90">
-                    <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                        <div>
-                          <CardTitle>Production calendar</CardTitle>
-                          <CardDescription>Keep venues, leads, and status aligned</CardDescription>
-                        </div>
-                        <div className="flex flex-col items-start gap-2 sm:items-end">
-                          <Badge variant="neutral">{data.events.length} events</Badge>
-                          <div className="flex flex-wrap justify-start gap-2 sm:justify-end">
-                            <div className="flex flex-col items-end gap-2">
-                              <Badge variant="neutral">
-                                {filteredEvents.length} of {data.events.length} events
-                              </Badge>
-                              <div className="flex flex-wrap justify-end gap-2">
-                                {selectedVisibleEventCount > 0 && (
-                                  <Badge variant="outline" className="border-primary/40 text-primary">
-                                    {selectedVisibleEventCount} selected
-                                  </Badge>
-                                )}
-                                <Button
-                                  type="button"
-                                  size="sm"
-                                  variant="outline"
-                                  onClick={selectAllEvents}
-                                  disabled={
-                                    filteredEvents.length === 0 ||
-                                    selectedVisibleEventCount === filteredEvents.length
-                                  }
-                                >
-                                  Select visible
-                                </Button>
-                                <Button
-                                  type="button"
-                                  size="sm"
-                                  variant="ghost"
-                                  className="text-destructive hover:text-destructive"
-                                  onClick={deleteSelectedEvents}
-                                  disabled={selectedVisibleEventCount === 0}
-                                >
-                                  Delete selected
-                                </Button>
-                                <Button
-                                  type="button"
-                                  size="sm"
-                                  variant="ghost"
-                                  onClick={duplicateSelectedEvents}
-                                  disabled={selectedVisibleEventCount === 0}
-                                >
-                                  Duplicate
-                                </Button>
-                                <Button
-                                  type="button"
-                                  size="sm"
-                                  variant="ghost"
-                                  onClick={clearEventSelection}
-                                  disabled={selectedVisibleEventCount === 0}
-                                >
-                                  Clear
-                                </Button>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      </CardHeader>
-                    <CardContent className="space-y-3">
-                      {filteredEvents.length === 0 ? (
-                        <p className="rounded-xl border border-dashed border-border/70 bg-muted/40 p-6 text-sm text-muted-foreground">
-                          {data.events.length === 0
-                            ? "Add your first event to start building your production calendar."
-                            : hasRecordsSearch
-                              ? "No events match your search right now. Try a different keyword or date."
-                              : "No events to display."}
-                        </p>
-                      ) : (
-                        filteredEvents.map((event) => {
-                          const client = clientMap.get(event.clientId);
-                          const assignedVendorDetails = (event.vendorIds ?? [])
-                            .flatMap((vendorId) => {
-                              const vendor = vendorMap.get(vendorId);
-                              if (!vendor) return [];
-                              return [
-                                {
-                                  vendor,
-                                  cost: event.vendorCosts?.[vendorId],
-                                },
-                              ];
-                            });
-                          const vendorSummaryParts: string[] = [];
-                          if (event.venue) {
-                            const venueCost = event.venueCost;
-                            vendorSummaryParts.push(
-                              `${event.venue}${
-                                typeof venueCost === "number" ? ` (${formatCurrency(venueCost)})` : ""
-                              }`
-                            );
-                          }
-                          vendorSummaryParts.push(
-                            ...assignedVendorDetails.map(({ vendor, cost }) =>
-                              `${vendor.name}${typeof cost === "number" ? ` (${formatCurrency(cost)})` : ""}`
-                            )
-                          );
-                          const vendorSummary = vendorSummaryParts.join(", ");
-                          return (
-                            <div key={event.id} className="space-y-2 rounded-xl border border-border/80 bg-muted/40 p-4">
-                              <div className="flex flex-wrap items-center justify-between gap-3">
-                                <div>
-                                  <h3 className="text-base font-semibold text-foreground">{event.name}</h3>
-                                  <p className="text-xs text-muted-foreground">
-                                    {formatDate(event.date)} · {event.venue}
-                                  </p>
-                                </div>
-                                <div className="flex flex-wrap items-center gap-2">
-                                  <Badge variant="neutral" className="capitalize">
-                                    {eventStatusLabels[event.status]}
-                                  </Badge>
-                                  <Button
-                                    type="button"
-                                    size="sm"
-                                    variant="ghost"
-                                    onClick={() => handleEventEditRequest(event.id)}
-                                  >
-                                    Edit
-                                  </Button>
-                                  <Button
-                                    type="button"
-                                    size="sm"
-                                    variant="ghost"
-                                    className="text-destructive hover:text-destructive"
-                                    onClick={() => handleEventDelete(event.id)}
-                                  >
-                                    Delete
-                                  </Button>
-                                </div>
-                              </div>
-                              <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
-                                {client && <span>Client · {client.name}</span>}
-                                {event.coordinator && <span>Lead · {event.coordinator}</span>}
-                              </div>
-                              {typeof event.estimate === "number" && (
-                                <p className="text-xs text-muted-foreground">
-                                  Estimate · {formatCurrency(event.estimate)}
-                                </p>
-                              )}
-                              {typeof event.deposit === "number" && (
-                                <p className="text-xs text-muted-foreground">
-                                  Deposit {event.depositPaid ? "received" : "due"} · {formatCurrency(event.deposit)}
-                                </p>
-                              )}
-                              {vendorSummary && (
-                                <p className="text-xs text-muted-foreground">
-                                  Vendors · {vendorSummary}
-                                </p>
-                              )}
-                              {event.timeline && (
-                                <p className="text-xs text-muted-foreground/80">{event.timeline}</p>
-                              )}
-                            </div>
-                          );
-                        })
-                      )}
-                    </CardContent>
-                  </Card>
-                </section>
-              </TabsContent>
-
-              <TabsContent value="vendors" className="space-y-6">
-                <section className="grid gap-6 lg:grid-cols-[1fr_1.1fr]">
-                  <VendorForm
-                    mode={editingVendor ? "edit" : "create"}
-                    initialVendor={editingVendor ?? undefined}
-                    onSubmit={handleVendorSubmit}
-                    onCancel={() => setEditingVendorId(null)}
-                    onDelete={handleVendorDelete}
-                  />
+          <TabsContent value="clients" className="space-y-6">
+            {renderRecordsToolbar()}
+            <section className="grid gap-6 lg:grid-cols-[1fr_1.1fr]">
+                <ClientForm
+                  mode={editingClient ? "edit" : "create"}
+                  initialClient={editingClient ?? undefined}
+                  onSubmit={handleClientSubmit}
+                  onCancel={() => setEditingClientId(null)}
+                  onDelete={handleClientDelete}
+                />
                   <Card className="bg-card/90">
                     <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                       <div>
-                        <CardTitle>Vendor roster</CardTitle>
-                        <CardDescription>Trusted partners and sourcing notes</CardDescription>
+                        <CardTitle>Client roster</CardTitle>
+                        <CardDescription>Recent activity and event context</CardDescription>
                       </div>
                       <div className="flex flex-col items-start gap-2 sm:items-end">
-                        <Badge variant="neutral">
-                          {filteredVendors.length} of {data.vendors.length} vendors
-                        </Badge>
+                        <Badge variant="neutral">{data.clients.length} total</Badge>
                         <div className="flex flex-wrap justify-start gap-2 sm:justify-end">
-                          {selectedVisibleVendorCount > 0 && (
-                            <Badge variant="outline" className="border-primary/40 text-primary">
-                              {selectedVisibleVendorCount} selected
+                          <div className="flex flex-col items-end gap-2">
+                            <Badge variant="neutral">
+                              {filteredClients.length} of {data.clients.length} clients
                             </Badge>
-                          )}
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="outline"
-                            onClick={selectAllVendors}
-                            disabled={filteredVendors.length === 0 || selectedVisibleVendorCount === filteredVendors.length}
-                          >
-                            Select visible
-                          </Button>
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="ghost"
-                            className="text-destructive hover:text-destructive"
-                            onClick={deleteSelectedVendors}
-                            disabled={selectedVisibleVendorCount === 0}
-                          >
-                            Delete selected
-                          </Button>
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="ghost"
-                            onClick={duplicateSelectedVendors}
-                            disabled={selectedVisibleVendorCount === 0}
-                          >
-                            Duplicate
-                          </Button>
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="ghost"
-                            onClick={clearVendorSelection}
-                            disabled={selectedVisibleVendorCount === 0}
-                          >
-                            Clear
-                          </Button>
-                        </div>
-                      </div>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                        <div className="relative w-full sm:max-w-xs">
-                          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                          <Input
-                            value={vendorSearch}
-                            onChange={(event) => setVendorSearch(event.target.value)}
-                            placeholder="Search vendor or service"
-                            className="pl-9"
-                            aria-label="Search vendors"
-                          />
-                        </div>
-                        <div className="w-full overflow-x-auto">
-                          <div className="flex w-max items-center gap-2">
-                            <p className="text-xs text-muted-foreground sm:max-w-xs sm:text-sm">
-                              Use the search above or choose a service to narrow your vendor list.
-                            </p>
-                            <div className="flex flex-wrap items-center gap-2">
-                              <button
-                                type="button"
-                                onClick={() => setVendorServiceFilter("all")}
-                                className={cn(
-                                  "flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-medium transition",
-                                  vendorServiceFilter === "all"
-                                    ? "border-primary/40 bg-primary/10 text-primary"
-                                    : "border-border/60 bg-muted/40 text-muted-foreground hover:border-border/80 hover:text-foreground"
-                                )}
-                              >
-                                All
-                                <span className="rounded-full bg-background px-2 py-0.5 text-[10px] font-semibold text-muted-foreground">
-                                  {data.vendors.length}
-                                </span>
-                              </button>
-                              {vendorServiceCounts.map(({ service, count }) => (
-                                <button
-                                  key={service}
-                                  type="button"
-                                  onClick={() => setVendorServiceFilter(service.toLowerCase())}
-                                  className={cn(
-                                    "flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-medium transition",
-                                    vendorServiceFilter === service.toLowerCase()
-                                      ? "border-primary/40 bg-primary/10 text-primary"
-                                      : "border-border/60 bg-muted/40 text-muted-foreground hover:border-border/80 hover:text-foreground"
-                                  )}
-                                >
-                                  {service}
-                                  <span className="rounded-full bg-background px-2 py-0.5 text-[10px] font-semibold text-muted-foreground">
-                                    {count}
-                                  </span>
-                                </button>
-                              ))}
-                              {hasVendorFilters && (
-                                <Button type="button" variant="ghost" size="sm" onClick={handleResetVendorFilters}>
-                                  Clear filters
-                                </Button>
+                            <div className="flex flex-wrap justify-end gap-2">
+                              {selectedVisibleClientCount > 0 && (
+                                <Badge variant="outline" className="border-primary/40 text-primary">
+                                  {selectedVisibleClientCount} selected
+                                </Badge>
                               )}
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                onClick={selectAllClients}
+                                disabled={
+                                  filteredClients.length === 0 ||
+                                  selectedVisibleClientCount === filteredClients.length
+                                }
+                              >
+                                Select visible
+                              </Button>
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="ghost"
+                                className="text-destructive hover:text-destructive"
+                                onClick={deleteSelectedClients}
+                                disabled={selectedVisibleClientCount === 0}
+                              >
+                                Delete selected
+                              </Button>
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="ghost"
+                                onClick={duplicateSelectedClients}
+                                disabled={selectedVisibleClientCount === 0}
+                              >
+                                Duplicate
+                              </Button>
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="ghost"
+                                onClick={clearClientSelection}
+                                disabled={selectedVisibleClientCount === 0}
+                              >
+                                Clear
+                              </Button>
                             </div>
                           </div>
                         </div>
                       </div>
-                      {filteredVendors.length === 0 ? (
-                        <p className="rounded-xl border border-dashed border-border/70 bg-muted/40 p-6 text-sm text-muted-foreground">
-                          {hasVendorFilters
-                            ? "No vendors match your filters right now. Adjust your search or add a new partner."
-                            : "Add your first vendor to start building your partner roster."}
-                        </p>
-                      ) : (
-                        filteredVendors.map((vendor) => (
-                          <div key={vendor.id} className="space-y-3 rounded-xl border border-border/80 bg-muted/40 p-4">
-                            <div className="flex flex-wrap items-center justify-between gap-3">
-                              <div>
-                                <h3 className="text-base font-semibold text-foreground">{vendor.name}</h3>
-                                <p className="text-xs text-muted-foreground">
-                                  {vendor.service} · Costs tracked per event
-                                </p>
+                    </CardHeader>
+                    <CardContent className="space-y-3">
+                      {filteredClients.length === 0 ? (
+                      <p className="rounded-xl border border-dashed border-border/70 bg-muted/40 p-6 text-sm text-muted-foreground">
+                        {data.clients.length === 0
+                          ? "Add your first client to start tracking your pipeline."
+                          : hasRecordsSearch
+                              ? "No clients match your search right now. Try a different name, email, or note keyword."
+                              : "No clients to display."}
+                      </p>
+                    ) : (
+                      filteredClients.map((client) => {
+                        const isSelected = selectedClientIds.includes(client.id);
+                        return (
+                          <div
+                            key={client.id}
+                            className={cn(
+                              "space-y-3 rounded-xl border border-border/80 bg-muted/40 p-4",
+                              isSelected && "border-primary/60 bg-primary/5"
+                            )}
+                          >
+                            <div className="flex flex-wrap items-start justify-between gap-3">
+                              <div className="flex items-start gap-3">
+                                <input
+                                  type="checkbox"
+                                  aria-label={`Select ${client.name}`}
+                                  checked={isSelected}
+                                  onChange={() => toggleClientSelection(client.id)}
+                                  className="mt-1 h-4 w-4 rounded border border-border text-primary accent-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 focus-visible:ring-offset-0"
+                                />
+                                <div>
+                                  <h3 className="text-base font-semibold text-foreground">{client.name}</h3>
+                                  <p className="text-xs text-muted-foreground">{client.email}</p>
+                                </div>
                               </div>
                               <div className="flex flex-wrap items-center gap-2">
-                                {vendor.preferredContact ? (
-                                  <Badge variant="neutral" className="capitalize">
-                                    Prefers {preferredContactLabels[vendor.preferredContact]}
-                                  </Badge>
-                                ) : (
-                                  <Badge variant="neutral">Flexible contact</Badge>
-                                )}
+                                <Badge className="capitalize bg-primary/10 text-primary">
+                                  {clientStatusLabels[client.status]}
+                                </Badge>
                                 <Button
                                   type="button"
                                   size="sm"
                                   variant="ghost"
-                                  onClick={() => setEditingVendorId(vendor.id)}
+                                  onClick={() => setEditingClientId(client.id)}
                                 >
                                   Edit
                                 </Button>
@@ -2131,78 +1373,877 @@ export default function HomePage() {
                                   size="sm"
                                   variant="ghost"
                                   className="text-destructive hover:text-destructive"
-                                  onClick={() => handleVendorDelete(vendor.id)}
+                                  onClick={() => handleClientDelete(client.id)}
                                 >
                                   Delete
                                 </Button>
                               </div>
                             </div>
                             <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
-                              {vendor.email && <span>{vendor.email}</span>}
-                              {vendor.phone && <span>{vendor.phone}</span>}
-                              {vendor.website && <span>{vendor.website}</span>}
+                              {client.phone && <span>{client.phone}</span>}
+                              {client.eventDate && <span>Event · {formatDate(client.eventDate)}</span>}
+                              {typeof client.budget === "number" && (
+                                <span>Budget · {formatCurrency(client.budget)}</span>
+                              )}
                             </div>
-                            {(vendor.email || vendor.phone || vendor.website) && (
-                              <div className="flex flex-wrap items-center gap-2 text-xs">
-                                {vendor.email && (
-                                  <Button
-                                    type="button"
-                                    variant="outline"
-                                    size="sm"
-                                    className="h-8 rounded-full px-3"
-                                    asChild
-                                  >
-                                    <a href={`mailto:${vendor.email}`} className="inline-flex items-center gap-1.5">
-                                      <Mail className="h-4 w-4" /> Email
-                                    </a>
-                                  </Button>
-                                )}
-                                {vendor.phone && (
-                                  <Button
-                                    type="button"
-                                    variant="outline"
-                                    size="sm"
-                                    className="h-8 rounded-full px-3"
-                                    asChild
-                                  >
-                                    <a href={`tel:${vendor.phone}`} className="inline-flex items-center gap-1.5">
-                                      <Phone className="h-4 w-4" /> Call
-                                    </a>
-                                  </Button>
-                                )}
-                                {vendor.website && (
-                                  <Button
-                                    type="button"
-                                    variant="outline"
-                                    size="sm"
-                                    className="h-8 rounded-full px-3"
-                                    asChild
-                                  >
-                                    <a
-                                      href={vendor.website}
-                                      target="_blank"
-                                      rel="noreferrer"
-                                      className="inline-flex items-center gap-1.5"
+                            {client.notes && (
+                              <p className="text-sm text-muted-foreground/90">{client.notes}</p>
+                            )}
+                          </div>
+                        );
+                      })
+                    )}
+                  </CardContent>
+                </Card>
+              </section>
+          </TabsContent>
+
+          <TabsContent value="events" className="space-y-6">
+            {renderRecordsToolbar()}
+            <section className="grid gap-6 lg:grid-cols-[1fr_1.1fr]">
+                <EventForm
+                  mode={editingEvent ? "edit" : "create"}
+                  initialEvent={editingEvent ?? undefined}
+                  onSubmit={handleEventSubmit}
+                  onCancel={() => setEditingEventId(null)}
+                  onDelete={handleEventDelete}
+                  clients={data.clients}
+                  vendors={data.vendors}
+                />
+                <Card className="bg-card/90">
+                  <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                      <div>
+                        <CardTitle>Production calendar</CardTitle>
+                        <CardDescription>Keep venues, leads, and status aligned</CardDescription>
+                      </div>
+                      <div className="flex flex-col items-start gap-2 sm:items-end">
+                        <Badge variant="neutral">{data.events.length} events</Badge>
+                        <div className="flex flex-wrap justify-start gap-2 sm:justify-end">
+                          <div className="flex flex-col items-end gap-2">
+                            <Badge variant="neutral">
+                              {filteredEvents.length} of {data.events.length} events
+                            </Badge>
+                            <div className="flex flex-wrap justify-end gap-2">
+                              {selectedVisibleEventCount > 0 && (
+                                <Badge variant="outline" className="border-primary/40 text-primary">
+                                  {selectedVisibleEventCount} selected
+                                </Badge>
+                              )}
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                onClick={selectAllEvents}
+                                disabled={
+                                  filteredEvents.length === 0 ||
+                                  selectedVisibleEventCount === filteredEvents.length
+                                }
+                              >
+                                Select visible
+                              </Button>
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="ghost"
+                                className="text-destructive hover:text-destructive"
+                                onClick={deleteSelectedEvents}
+                                disabled={selectedVisibleEventCount === 0}
+                              >
+                                Delete selected
+                              </Button>
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="ghost"
+                                onClick={duplicateSelectedEvents}
+                                disabled={selectedVisibleEventCount === 0}
+                              >
+                                Duplicate
+                              </Button>
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="ghost"
+                                onClick={clearEventSelection}
+                                disabled={selectedVisibleEventCount === 0}
+                              >
+                                Clear
+                              </Button>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </CardHeader>
+                  <CardContent className="space-y-3">
+                    {filteredEvents.length === 0 ? (
+                      <p className="rounded-xl border border-dashed border-border/70 bg-muted/40 p-6 text-sm text-muted-foreground">
+                        {data.events.length === 0
+                          ? "Add your first event to start building your production calendar."
+                          : hasRecordsSearch
+                            ? "No events match your search right now. Try a different keyword or date."
+                            : "No events to display."}
+                      </p>
+                    ) : (
+                      filteredEvents.map((event) => {
+                        const client = clientMap.get(event.clientId);
+                        const assignedVendorDetails = (event.vendorIds ?? [])
+                          .flatMap((vendorId) => {
+                            const vendor = vendorMap.get(vendorId);
+                            if (!vendor) return [];
+                            return [
+                              {
+                                vendor,
+                                cost: event.vendorCosts?.[vendorId],
+                              },
+                            ];
+                          });
+                        const vendorSummaryParts: string[] = [];
+                        if (event.venue) {
+                          const venueCost = event.venueCost;
+                          vendorSummaryParts.push(
+                            `${event.venue}${
+                              typeof venueCost === "number" ? ` (${formatCurrency(venueCost)})` : ""
+                            }`
+                          );
+                        }
+                        vendorSummaryParts.push(
+                          ...assignedVendorDetails.map(({ vendor, cost }) =>
+                            `${vendor.name}${typeof cost === "number" ? ` (${formatCurrency(cost)})` : ""}`
+                          )
+                        );
+                        const vendorSummary = vendorSummaryParts.join(", ");
+                        return (
+                          <div key={event.id} className="space-y-2 rounded-xl border border-border/80 bg-muted/40 p-4">
+                            <div className="flex flex-wrap items-center justify-between gap-3">
+                              <div>
+                                <h3 className="text-base font-semibold text-foreground">{event.name}</h3>
+                                <p className="text-xs text-muted-foreground">
+                                  {formatDate(event.date)} · {event.venue}
+                                </p>
+                              </div>
+                              <div className="flex flex-wrap items-center gap-2">
+                                <Badge variant="neutral" className="capitalize">
+                                  {eventStatusLabels[event.status]}
+                                </Badge>
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="ghost"
+                                  onClick={() => handleEventEditRequest(event.id)}
+                                >
+                                  Edit
+                                </Button>
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="ghost"
+                                  className="text-destructive hover:text-destructive"
+                                  onClick={() => handleEventDelete(event.id)}
+                                >
+                                  Delete
+                                </Button>
+                              </div>
+                            </div>
+                            <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+                              {client && <span>Client · {client.name}</span>}
+                              {event.coordinator && <span>Lead · {event.coordinator}</span>}
+                            </div>
+                            {typeof event.estimate === "number" && (
+                              <p className="text-xs text-muted-foreground">
+                                Estimate · {formatCurrency(event.estimate)}
+                              </p>
+                            )}
+                            {typeof event.deposit === "number" && (
+                              <p className="text-xs text-muted-foreground">
+                                Deposit {event.depositPaid ? "received" : "due"} · {formatCurrency(event.deposit)}
+                              </p>
+                            )}
+                            {vendorSummary && (
+                              <p className="text-xs text-muted-foreground">
+                                Vendors · {vendorSummary}
+                              </p>
+                            )}
+                            {event.timeline && (
+                              <p className="text-xs text-muted-foreground/80">{event.timeline}</p>
+                            )}
+                          </div>
+                        );
+                      })
+                    )}
+                  </CardContent>
+                </Card>
+              </section>
+          </TabsContent>
+
+          <TabsContent value="vendors" className="space-y-6">
+            {renderRecordsToolbar()}
+            <section className="grid gap-6 lg:grid-cols-[1fr_1.1fr]">
+              <VendorForm
+                mode={editingVendor ? "edit" : "create"}
+                initialVendor={editingVendor ?? undefined}
+                onSubmit={handleVendorSubmit}
+                onCancel={() => setEditingVendorId(null)}
+                onDelete={handleVendorDelete}
+              />
+              <Card className="bg-card/90">
+                <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <CardTitle>Vendor roster</CardTitle>
+                    <CardDescription>Trusted partners and sourcing notes</CardDescription>
+                  </div>
+                  <div className="flex flex-col items-start gap-2 sm:items-end">
+                    <Badge variant="neutral">
+                      {filteredVendors.length} of {data.vendors.length} vendors
+                    </Badge>
+                    <div className="flex flex-wrap justify-start gap-2 sm:justify-end">
+                      {selectedVisibleVendorCount > 0 && (
+                        <Badge variant="outline" className="border-primary/40 text-primary">
+                          {selectedVisibleVendorCount} selected
+                        </Badge>
+                      )}
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        onClick={selectAllVendors}
+                        disabled={filteredVendors.length === 0 || selectedVisibleVendorCount === filteredVendors.length}
+                      >
+                        Select visible
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        className="text-destructive hover:text-destructive"
+                        onClick={deleteSelectedVendors}
+                        disabled={selectedVisibleVendorCount === 0}
+                      >
+                        Delete selected
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        onClick={duplicateSelectedVendors}
+                        disabled={selectedVisibleVendorCount === 0}
+                      >
+                        Duplicate
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        onClick={clearVendorSelection}
+                        disabled={selectedVisibleVendorCount === 0}
+                      >
+                        Clear
+                      </Button>
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="relative w-full sm:max-w-xs">
+                      <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                      <Input
+                        value={vendorSearch}
+                        onChange={(event) => setVendorSearch(event.target.value)}
+                        placeholder="Search vendor or service"
+                        className="pl-9"
+                        aria-label="Search vendors"
+                      />
+                    </div>
+                    <div className="w-full overflow-x-auto">
+                      <div className="flex w-max items-center gap-2">
+                        <p className="text-xs text-muted-foreground sm:max-w-xs sm:text-sm">
+                          Use the search above or choose a service to narrow your vendor list.
+                        </p>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setVendorServiceFilter("all")}
+                            className={cn(
+                              "flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-medium transition",
+                              vendorServiceFilter === "all"
+                                ? "border-primary/40 bg-primary/10 text-primary"
+                                : "border-border/60 bg-muted/40 text-muted-foreground hover:border-border/80 hover:text-foreground"
+                            )}
+                          >
+                            All
+                            <span className="rounded-full bg-background px-2 py-0.5 text-[10px] font-semibold text-muted-foreground">
+                              {data.vendors.length}
+                            </span>
+                          </button>
+                          {vendorServiceCounts.map(({ service, count }) => (
+                            <button
+                              key={service}
+                              type="button"
+                              onClick={() => setVendorServiceFilter(service.toLowerCase())}
+                              className={cn(
+                                "flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-medium transition",
+                                vendorServiceFilter === service.toLowerCase()
+                                  ? "border-primary/40 bg-primary/10 text-primary"
+                                  : "border-border/60 bg-muted/40 text-muted-foreground hover:border-border/80 hover:text-foreground"
+                              )}
+                            >
+                              {service}
+                              <span className="rounded-full bg-background px-2 py-0.5 text-[10px] font-semibold text-muted-foreground">
+                                {count}
+                              </span>
+                            </button>
+                          ))}
+                          {hasVendorFilters && (
+                            <Button type="button" variant="ghost" size="sm" onClick={handleResetVendorFilters}>
+                              Clear filters
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  {filteredVendors.length === 0 ? (
+                    <p className="rounded-xl border border-dashed border-border/70 bg-muted/40 p-6 text-sm text-muted-foreground">
+                      {hasVendorFilters
+                        ? "No vendors match your filters right now. Adjust your search or add a new partner."
+                        : "Add your first vendor to start building your partner roster."}
+                    </p>
+                  ) : (
+                    filteredVendors.map((vendor) => (
+                      <div key={vendor.id} className="space-y-3 rounded-xl border border-border/80 bg-muted/40 p-4">
+                        <div className="flex flex-wrap items-center justify-between gap-3">
+                          <div>
+                            <h3 className="text-base font-semibold text-foreground">{vendor.name}</h3>
+                            <p className="text-xs text-muted-foreground">
+                              {vendor.service} · Costs tracked per event
+                            </p>
+                          </div>
+                          <div className="flex flex-wrap items-center gap-2">
+                            {vendor.preferredContact ? (
+                              <Badge variant="neutral" className="capitalize">
+                                Prefers {preferredContactLabels[vendor.preferredContact]}
+                              </Badge>
+                            ) : (
+                              <Badge variant="neutral">Flexible contact</Badge>
+                            )}
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => handleVendorEditRequest(vendor.id)}
+                            >
+                              Edit
+                            </Button>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="ghost"
+                              className="text-destructive hover:text-destructive"
+                              onClick={() => handleVendorDelete(vendor.id)}
+                            >
+                              Delete
+                            </Button>
+                          </div>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+                          {vendor.email && <span>{vendor.email}</span>}
+                          {vendor.phone && <span>{vendor.phone}</span>}
+                          {vendor.website && <span>{vendor.website}</span>}
+                        </div>
+                        {(vendor.email || vendor.phone || vendor.website) && (
+                          <div className="flex flex-wrap items-center gap-2 text-xs">
+                            {vendor.email && (
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                className="h-8 rounded-full px-3"
+                                asChild
+                              >
+                                <a href={`mailto:${vendor.email}`} className="inline-flex items-center gap-1.5">
+                                  <Mail className="h-4 w-4" /> Email
+                                </a>
+                              </Button>
+                            )}
+                            {vendor.phone && (
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                className="h-8 rounded-full px-3"
+                                asChild
+                              >
+                                <a href={`tel:${vendor.phone}`} className="inline-flex items-center gap-1.5">
+                                  <Phone className="h-4 w-4" /> Call
+                                </a>
+                              </Button>
+                            )}
+                            {vendor.website && (
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                className="h-8 rounded-full px-3"
+                                asChild
+                              >
+                                <a
+                                  href={vendor.website}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="inline-flex items-center gap-1.5"
+                                >
+                                  <Globe className="h-4 w-4" /> Site
+                                </a>
+                              </Button>
+                            )}
+                          </div>
+                        )}
+                        {vendor.notes && (
+                          <p className="text-sm text-muted-foreground/90">{vendor.notes}</p>
+                        )}
+                      </div>
+                    ))
+                  )}
+                </CardContent>
+              </Card>
+            </section>
+          </TabsContent>
+
+          <TabsContent value="leads" className="space-y-6">
+            <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                <Card className="bg-card/90">
+                  <CardHeader className="pb-2 space-y-3">
+                    <CardDescription>Pipeline value</CardDescription>
+                    <div className="flex flex-wrap gap-6">
+                      <div className="space-y-1">
+                        <p className="text-xs uppercase tracking-wide text-muted-foreground">Confirmed</p>
+                        <p className="text-3xl font-semibold text-foreground">
+                          {formatCurrency(overview.pipelineConfirmed)}
+                        </p>
+                      </div>
+                      <div className="space-y-1">
+                        <p className="text-xs uppercase tracking-wide text-muted-foreground">Proposed</p>
+                        <p className="text-3xl font-semibold text-foreground">
+                          {formatCurrency(overview.pipelineProposed)}
+                        </p>
+                      </div>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="text-xs text-muted-foreground">
+                    Confirmed reflects signed work minus collected deposits. Proposed totals active bids and outreach.
+                  </CardContent>
+                </Card>
+                <Card className="bg-card/90">
+                  <CardHeader className="pb-2">
+                    <CardDescription>Confirmed after vendor cost</CardDescription>
+                    <CardTitle className="text-3xl font-semibold">
+                      {formatCurrency(overview.confirmedAfterVendorCost)}
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="text-xs text-muted-foreground">
+                    Projects margin once vendor commitments are covered.
+                  </CardContent>
+                </Card>
+                <Card className="bg-primary text-primary-foreground">
+                  <CardHeader className="pb-2">
+                    <CardDescription className="text-primary-foreground/80">
+                      Currently held deposits
+                    </CardDescription>
+                    <CardTitle className="text-3xl font-semibold">
+                      {formatCurrency(overview.heldDeposits)}
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="text-xs text-primary-foreground/80">
+                    {overview.heldDepositCount === 0
+                      ? "Mark deposits as received in event records to track retainers."
+                      : `${overview.heldDepositCount} deposit${
+                          overview.heldDepositCount === 1 ? "" : "s"
+                        } received across active events.`}
+                  </CardContent>
+                </Card>
+              </section>
+
+            <section className="grid gap-6 xl:grid-cols-[2fr_1fr]">
+                <Card className="bg-card/90">
+                  <CardHeader className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                      <CardTitle>Client pipeline</CardTitle>
+                      <CardDescription>
+                        Drag clients between stages or drop a text list to capture new leads in seconds.
+                      </CardDescription>
+                    </div>
+                    <Badge variant="neutral">{overview.totalClients} in play</Badge>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+                      {overview.pipeline.map((column) => (
+                        <div
+                          key={column.id}
+                          className={cn(
+                            "space-y-3 rounded-2xl border border-border/70 bg-muted/40 p-4 transition",
+                            activeDropColumn === column.id &&
+                              "border-primary/70 bg-primary/5 shadow-sm"
+                          )}
+                          data-status={column.id}
+                          onDragEnter={(event) => handleColumnDragOver(event, column.id)}
+                          onDragOver={(event) => handleColumnDragOver(event, column.id)}
+                          onDragLeave={(event) => handleColumnDragLeave(event, column.id)}
+                          onDrop={(event) => handleColumnDrop(event, column.id)}
+                        >
+                          <div className="flex items-center justify-between text-sm font-semibold text-foreground">
+                            <span>{column.label}</span>
+                            <span className="text-xs text-muted-foreground">{column.items.length}</span>
+                          </div>
+                          {column.items.length === 0 ? (
+                            <p className="text-xs text-muted-foreground">
+                              No records yet. Drop a card here or import a client list below.
+                            </p>
+                          ) : (
+                            <div className="space-y-3">
+                              {column.items.map((client) => (
+                                <div
+                                  key={client.id}
+                                  className={cn(
+                                    "space-y-2 rounded-xl border border-border/70 bg-background/70 p-3 text-xs transition",
+                                    draggingClientId === client.id ? "opacity-50" : "hover:border-primary/50 hover:shadow-sm"
+                                  )}
+                                  draggable
+                                  onDragStart={(event) => handleDragStart(event, client.id)}
+                                  onDragEnd={handleDragEnd}
+                                  aria-grabbed={draggingClientId === client.id}
+                                  role="button"
+                                  tabIndex={0}
+                                  onClick={() => handleClientEditRequest(client.id)}
+                                  onKeyDown={(event) => {
+                                    if (event.key === "Enter" || event.key === " ") {
+                                      event.preventDefault();
+                                      handleClientEditRequest(client.id);
+                                    }
+                                  }}
+                                >
+                                  <div className="flex items-center justify-between">
+                                    <p className="font-medium text-foreground">{client.name}</p>
+                                    <Badge className={cn("px-2 py-0.5 text-[10px] font-semibold", column.accent)}>
+                                      {clientStatusLabels[client.status]}
+                                    </Badge>
+                                  </div>
+                                  <div className="space-y-1 text-muted-foreground">
+                                    {client.eventDate && <p>Event · {formatDate(client.eventDate)}</p>}
+                                    {typeof client.budget === "number" && (
+                                      <p>Budget · {formatCurrency(client.budget)}</p>
+                                    )}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                    <div
+                      className={cn(
+                        "flex flex-col items-center justify-center gap-2 rounded-2xl border border-dashed border-border/60 bg-muted/30 p-6 text-center text-xs text-muted-foreground transition",
+                        isImportDragActive && "border-primary/60 bg-primary/5 text-primary"
+                      )}
+                      role="button"
+                      tabIndex={0}
+                      aria-label="Import clients by pasting, dropping, or uploading text files"
+                      onClick={handleImportZoneClick}
+                      onKeyDown={handleImportZoneKeyDown}
+                      onPaste={handleImportPaste}
+                      onDragEnter={handleImportDragEnter}
+                      onDragLeave={handleImportDragLeave}
+                      onDragOver={handleImportDragOver}
+                      onDrop={handleImportDrop}
+                    >
+                      <p className="text-sm font-medium text-foreground">Click or drop text to add clients</p>
+                      <p className="max-w-md">
+                        Paste, drop, or upload lines formatted like
+                        <span className="mx-1 rounded bg-background px-1 py-0.5 font-mono text-[11px] text-foreground">
+                          Name | Email | Phone | Status | Event Date | Budget | Notes
+                        </span>
+                        or choose a .txt/.csv file.
+                      </p>
+                      <input
+                        ref={fileInputRef}
+                        type="file"
+                        accept=".txt,.csv,text/plain"
+                        multiple
+                        className="sr-only"
+                        onChange={handleImportFileChange}
+                      />
+                    </div>
+                    {importPreview && (
+                      <div className="w-full space-y-4 rounded-2xl border border-border/70 bg-muted/20 p-4 text-left">
+                        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                          <div className="space-y-1">
+                            <h3 className="text-sm font-semibold text-foreground">Preview detected clients</h3>
+                            <p className="text-xs text-muted-foreground">
+                              {importPreview.created.length > 0
+                                ? `Ready to add ${importPreview.created.length} client${
+                                    importPreview.created.length === 1 ? "" : "s"
+                                  }.`
+                                : "We couldn't identify any client rows yet. Adjust the text below or cancel the import."}
+                              {importPreview.sources.length > 0 && (
+                                <span> Source: {importPreview.sources.join(", ")}</span>
+                              )}
+                            </p>
+                            {importPreview.skipped.length > 0 && (
+                              <p className="text-xs text-muted-foreground">
+                                Skipped {importPreview.skipped.length} line{importPreview.skipped.length === 1 ? "" : "s"}. Review or edit them below before importing.
+                              </p>
+                            )}
+                          </div>
+                          <div className="flex flex-wrap gap-2">
+                            <Button type="button" size="sm" variant="ghost" onClick={handleImportPreviewCancel}>
+                              Cancel
+                            </Button>
+                            <Button
+                              type="button"
+                              size="sm"
+                              onClick={handleImportPreviewConfirm}
+                              disabled={importPreview.created.length === 0}
+                            >
+                              Import clients
+                            </Button>
+                          </div>
+                        </div>
+                        <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)]">
+                          <div className="space-y-3">
+                            <div className="space-y-2">
+                              <p className="text-xs font-medium text-muted-foreground">Preview sample</p>
+                              {importPreview.created.length === 0 ? (
+                                <p className="rounded-lg border border-dashed border-border/60 bg-background/60 p-3 text-[11px] text-muted-foreground">
+                                  No importable rows detected yet.
+                                </p>
+                              ) : (
+                                <ul className="space-y-2 text-xs text-muted-foreground">
+                                  {importPreview.created.slice(0, 5).map((client, index) => (
+                                    <li
+                                      key={`${client.name}-${client.email ?? "unknown"}-${index}`}
+                                      className="flex flex-col gap-1 rounded-lg border border-border/60 bg-background/60 p-3"
                                     >
-                                      <Globe className="h-4 w-4" /> Site
-                                    </a>
-                                  </Button>
+                                      <span className="text-sm font-semibold text-foreground">{client.name}</span>
+                                      {client.email && <span>{client.email}</span>}
+                                      {client.phone && <span>{client.phone}</span>}
+                                    </li>
+                                  ))}
+                                </ul>
+                              )}
+                              {importPreview.created.length > 5 && (
+                                <p className="text-[11px] text-muted-foreground">
+                                  +{importPreview.created.length - 5} more client{importPreview.created.length - 5 === 1 ? "" : "s"} detected.
+                                </p>
+                              )}
+                            </div>
+                            {importPreview.skipped.length > 0 && (
+                              <div className="space-y-2 rounded-lg border border-dashed border-border/60 bg-background/60 p-3">
+                                <p className="text-xs font-medium text-foreground">Lines to review</p>
+                                <ul className="space-y-1 text-[11px] font-mono text-muted-foreground/80">
+                                  {importPreview.skipped.slice(0, 4).map((line, index) => (
+                                    <li key={`skipped-${index}`} className="truncate">
+                                      {line}
+                                    </li>
+                                  ))}
+                                </ul>
+                                {importPreview.skipped.length > 4 && (
+                                  <p className="text-[11px] text-muted-foreground">
+                                    +{importPreview.skipped.length - 4} additional line{importPreview.skipped.length - 4 === 1 ? "" : "s"} skipped.
+                                  </p>
                                 )}
                               </div>
                             )}
-                            {vendor.notes && (
-                              <p className="text-sm text-muted-foreground/90">{vendor.notes}</p>
-                            )}
                           </div>
-                        ))
-                      )}
-                    </CardContent>
-                  </Card>
-                </section>
-              </TabsContent>
-            </Tabs>
-          </TabsContent>
+                          <div className="space-y-2">
+                            <Label htmlFor="import-preview-text" className="text-xs font-medium text-muted-foreground">
+                              Adjust text before importing
+                            </Label>
+                            <Textarea
+                              id="import-preview-text"
+                              value={importPreviewText}
+                              onChange={(event) => handleImportPreviewTextChange(event.target.value)}
+                              className="min-h-[180px] font-mono text-xs"
+                            />
+                            <p className="text-[11px] text-muted-foreground">Changes update the preview automatically.</p>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                    {(importSummary || importError) && (
+                      <div className="space-y-1 text-xs">
+                        {importSummary && <p className="text-foreground">{importSummary}</p>}
+                        {importError && <p className="text-destructive">{importError}</p>}
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
 
+              </section>
+
+            <section className="grid gap-6 lg:grid-cols-2">
+                <Card className="bg-card/90">
+                  <CardHeader className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                      <CardTitle>Upcoming events</CardTitle>
+                      <CardDescription>Timeline-ready snapshot of the next celebrations</CardDescription>
+                    </div>
+                    <Badge variant="neutral">{overview.upcomingEvents.length} scheduled</Badge>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    {overview.upcomingEvents.length === 0 && (
+                      <p className="text-sm text-muted-foreground">Add an event to populate your schedule.</p>
+                    )}
+                    {overview.upcomingEvents.map((event) => {
+                      const client = clientMap.get(event.clientId);
+                      const assignedVendorDetails = (event.vendorIds ?? [])
+                        .map((vendorId) => {
+                          const vendor = vendorMap.get(vendorId);
+                          if (!vendor) {
+                            return null;
+                          }
+
+                          return {
+                            vendor,
+                            cost: event.vendorCosts?.[vendorId],
+                          };
+                        })
+                        .filter(
+                          (entry): entry is { vendor: Vendor; cost: number | undefined } => entry !== null
+                        );
+                      const vendorSummaryParts: string[] = [];
+                      if (event.venue) {
+                        const venueCost = event.venueCost;
+                        vendorSummaryParts.push(
+                          `${event.venue}${
+                            typeof venueCost === "number" ? ` (${formatCurrency(venueCost)})` : ""
+                          }`
+                        );
+                      }
+                      vendorSummaryParts.push(
+                        ...assignedVendorDetails.map(({ vendor, cost }) =>
+                          `${vendor.name}${typeof cost === "number" ? ` (${formatCurrency(cost)})` : ""}`
+                        )
+                      );
+                      const vendorSummary = vendorSummaryParts.join(", ");
+                      return (
+                        <button
+                          key={event.id}
+                          type="button"
+                          onClick={() => handleEventEditRequest(event.id)}
+                          className={cn(
+                            "w-full space-y-2 rounded-xl border border-border/70 bg-muted/40 p-4 text-left",
+                            "transition hover:border-primary/60 hover:shadow-sm",
+                            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
+                          )}
+                        >
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <div>
+                              <h3 className="text-base font-semibold text-foreground">{event.name}</h3>
+                              <p className="text-xs uppercase tracking-wider text-muted-foreground">
+                                {formatDate(event.date)} · {event.venue}
+                              </p>
+                            </div>
+                            <Badge variant="neutral" className="capitalize">
+                              {eventStatusLabels[event.status]}
+                            </Badge>
+                          </div>
+                          <p className="text-xs text-muted-foreground">
+                            Lead planner · {event.coordinator || "Unassigned"}
+                          </p>
+                          {client && (
+                            <p className="text-xs text-muted-foreground">Client · {client.name}</p>
+                          )}
+                          {typeof event.estimate === "number" && (
+                            <p className="text-xs text-muted-foreground">
+                              Estimate · {formatCurrency(event.estimate)}
+                            </p>
+                          )}
+                          {typeof event.deposit === "number" && (
+                            <p className="text-xs text-muted-foreground">
+                              Deposit {event.depositPaid ? "received" : "due"} · {formatCurrency(event.deposit)}
+                            </p>
+                          )}
+                          {vendorSummary && (
+                            <p className="text-xs text-muted-foreground">
+                              Vendors · {vendorSummary}
+                            </p>
+                          )}
+                          {event.timeline && (
+                            <p className="text-xs text-muted-foreground/80">{event.timeline}</p>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </CardContent>
+                </Card>
+
+                <Card className="bg-card/90">
+                  <CardHeader className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                      <CardTitle>Recent invoices</CardTitle>
+                      <CardDescription>Track billing status at a glance</CardDescription>
+                    </div>
+                    <Button size="sm" variant="outline" onClick={() => setActiveTab("billing")}>
+                      Manage billing
+                    </Button>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    {overview.recentInvoices.length === 0 && (
+                      <p className="text-sm text-muted-foreground">
+                        Create your first invoice to see activity here.
+                      </p>
+                    )}
+                    {overview.recentInvoices.map((invoice) => {
+                      const client = clientMap.get(invoice.clientId);
+                      return (
+                        <div
+                          key={invoice.id}
+                          className="space-y-2 rounded-xl border border-border/70 bg-muted/40 p-4 text-sm"
+                        >
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <div>
+                              <p className="font-semibold text-foreground">Invoice {invoice.id}</p>
+                              <p className="text-xs text-muted-foreground">
+                                Issued {formatDate(invoice.issueDate)} · Due {formatDate(invoice.dueDate)}
+                              </p>
+                            </div>
+                            <div className="flex flex-wrap items-center gap-2">
+                              <Badge className={`${invoiceStatusStyles[invoice.status]} capitalize`}>
+                                {invoice.status}
+                              </Badge>
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => {
+                                  setActiveTab("billing");
+                                  setEditingInvoiceId(invoice.id);
+                                }}
+                              >
+                                Edit
+                              </Button>
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="ghost"
+                                className="text-destructive hover:text-destructive"
+                                onClick={() => handleInvoiceDelete(invoice.id)}
+                              >
+                                Delete
+                              </Button>
+                            </div>
+                          </div>
+                          <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+                            {client && <span>{client.name}</span>}
+                            <span>Total {formatCurrency(invoice.total)}</span>
+                            <span>{invoice.items.length} line items</span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </CardContent>
+                </Card>
+              </section>
+          </TabsContent>
           <TabsContent value="billing" className="space-y-6">
             <section className="grid gap-6 lg:grid-cols-[1fr_1.1fr]">
               <InvoiceForm
