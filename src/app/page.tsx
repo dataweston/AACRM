@@ -1067,13 +1067,13 @@ export default function HomePage() {
   return (
     <div className="min-h-screen bg-background">
       <header className="border-b border-border/50 bg-background/80 backdrop-blur">
-        <div className="mx-auto flex w-full max-w-6xl flex-wrap items-center justify-between gap-3 px-4 py-3 text-xs sm:text-sm">
-          <div className="flex items-center gap-3 text-muted-foreground">
+        <div className="mx-auto flex w-full max-w-6xl flex-col gap-3 px-4 py-3 text-xs sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:text-sm">
+          <div className="flex flex-col items-start gap-1 text-muted-foreground sm:flex-row sm:items-center sm:gap-3">
             <span className="font-semibold uppercase tracking-[0.35em] text-foreground">AACRM</span>
             <span aria-hidden className="hidden h-4 border-l border-border/60 sm:inline" />
             <span>Signed in as {session.user?.name || session.user?.email || "your team"}</span>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2 sm:justify-end">
             {isOffline && (
               <Badge variant="outline" className="border-amber-300 bg-amber-100 text-amber-800">
                 Offline mode
@@ -1099,6 +1099,16 @@ export default function HomePage() {
             <TabsTrigger value="records">Records</TabsTrigger>
             <TabsTrigger value="leads-arr">Leads and ARR</TabsTrigger>
             <TabsTrigger value="billing">Billing</TabsTrigger>
+          <TabsList className="flex w-full flex-nowrap gap-2 overflow-x-auto bg-muted/70 p-2 text-xs sm:text-sm">
+            <TabsTrigger value="overview" className="flex-1 min-w-[92px] sm:min-w-[120px]">
+              Overview
+            </TabsTrigger>
+            <TabsTrigger value="records" className="flex-1 min-w-[92px] sm:min-w-[120px]">
+              Records
+            </TabsTrigger>
+            <TabsTrigger value="billing" className="flex-1 min-w-[92px] sm:min-w-[120px]">
+              Billing
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="leads-arr" className="space-y-6">
@@ -1594,6 +1604,16 @@ export default function HomePage() {
 
           <TabsContent value="records" className="space-y-8">
             <Tabs value={recordsTab} onValueChange={handleRecordsTabChange} className="space-y-6">
+              <TabsList className="flex w-full flex-nowrap gap-2 overflow-x-auto bg-muted/70 p-2 text-xs sm:text-sm">
+                <TabsTrigger value="clients" className="flex-1 min-w-[92px] sm:min-w-[110px]">
+                  Clients
+                </TabsTrigger>
+                <TabsTrigger value="events" className="flex-1 min-w-[92px] sm:min-w-[110px]">
+                  Events
+                </TabsTrigger>
+                <TabsTrigger value="vendors" className="flex-1 min-w-[92px] sm:min-w-[110px]">
+                  Vendors
+                </TabsTrigger>
               <div className="flex flex-col gap-3 rounded-xl border border-border/60 bg-muted/40 p-4 sm:flex-row sm:items-center sm:justify-between">
                 <div className="relative w-full sm:max-w-sm">
                   <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -1637,6 +1657,10 @@ export default function HomePage() {
                         <CardTitle>Client roster</CardTitle>
                         <CardDescription>Recent activity and event context</CardDescription>
                       </div>
+                      <div className="flex flex-col items-start gap-2 sm:items-end">
+                        <Badge variant="neutral">{data.clients.length} total</Badge>
+                        <div className="flex flex-wrap justify-start gap-2 sm:justify-end">
+                          {selectedClientIds.length > 0 && (
                       <div className="flex flex-col items-end gap-2">
                         <Badge variant="neutral">
                           {filteredClients.length} of {data.clients.length} clients
@@ -1780,6 +1804,10 @@ export default function HomePage() {
                         <CardTitle>Production calendar</CardTitle>
                         <CardDescription>Keep venues, leads, and status aligned</CardDescription>
                       </div>
+                      <div className="flex flex-col items-start gap-2 sm:items-end">
+                        <Badge variant="neutral">{data.events.length} events</Badge>
+                        <div className="flex flex-wrap justify-start gap-2 sm:justify-end">
+                          {selectedEventIds.length > 0 && (
                       <div className="flex flex-col items-end gap-2">
                         <Badge variant="neutral">
                           {filteredEvents.length} of {data.events.length} events
@@ -1946,11 +1974,11 @@ export default function HomePage() {
                         <CardTitle>Vendor roster</CardTitle>
                         <CardDescription>Trusted partners and sourcing notes</CardDescription>
                       </div>
-                      <div className="flex flex-col items-end gap-2">
+                      <div className="flex flex-col items-start gap-2 sm:items-end">
                         <Badge variant="neutral">
                           {filteredVendors.length} of {data.vendors.length} vendors
                         </Badge>
-                        <div className="flex flex-wrap justify-end gap-2">
+                        <div className="flex flex-wrap justify-start gap-2 sm:justify-end">
                           {selectedVisibleVendorCount > 0 && (
                             <Badge variant="outline" className="border-primary/40 text-primary">
                               {selectedVisibleVendorCount} selected
@@ -1998,6 +2026,18 @@ export default function HomePage() {
                     </CardHeader>
                     <CardContent className="space-y-4">
                       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                        <div className="relative w-full sm:max-w-xs">
+                          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                          <Input
+                            value={vendorSearch}
+                            onChange={(event) => setVendorSearch(event.target.value)}
+                            placeholder="Search vendor or service"
+                            className="pl-9"
+                            aria-label="Search vendors"
+                          />
+                        </div>
+                        <div className="w-full overflow-x-auto">
+                          <div className="flex w-max items-center gap-2">
                         <p className="text-xs text-muted-foreground sm:max-w-xs sm:text-sm">
                           Use the search above or choose a service to narrow your vendor list.
                         </p>
@@ -2019,27 +2059,44 @@ export default function HomePage() {
                           </button>
                           {vendorServiceCounts.map(({ service, count }) => (
                             <button
-                              key={service}
                               type="button"
-                              onClick={() => setVendorServiceFilter(service)}
+                              onClick={() => setVendorServiceFilter("all")}
                               className={cn(
                                 "flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-medium transition",
-                                vendorServiceFilter === service.toLowerCase()
+                                vendorServiceFilter === "all"
                                   ? "border-primary/40 bg-primary/10 text-primary"
                                   : "border-border/60 bg-muted/40 text-muted-foreground hover:border-border/80 hover:text-foreground"
                               )}
                             >
-                              {service}
+                              All
                               <span className="rounded-full bg-background px-2 py-0.5 text-[10px] font-semibold text-muted-foreground">
-                                {count}
+                                {data.vendors.length}
                               </span>
                             </button>
-                          ))}
-                          {hasVendorFilters && (
-                            <Button type="button" variant="ghost" size="sm" onClick={handleResetVendorFilters}>
-                              Clear filters
-                            </Button>
-                          )}
+                            {vendorServiceCounts.map(({ service, count }) => (
+                              <button
+                                key={service}
+                                type="button"
+                                onClick={() => setVendorServiceFilter(service)}
+                                className={cn(
+                                  "flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-medium transition",
+                                  vendorServiceFilter === service.toLowerCase()
+                                    ? "border-primary/40 bg-primary/10 text-primary"
+                                    : "border-border/60 bg-muted/40 text-muted-foreground hover:border-border/80 hover:text-foreground"
+                                )}
+                              >
+                                {service}
+                                <span className="rounded-full bg-background px-2 py-0.5 text-[10px] font-semibold text-muted-foreground">
+                                  {count}
+                                </span>
+                              </button>
+                            ))}
+                            {hasVendorFilters && (
+                              <Button type="button" variant="ghost" size="sm" onClick={handleResetVendorFilters}>
+                                Clear filters
+                              </Button>
+                            )}
+                          </div>
                         </div>
                       </div>
                       {filteredVendors.length === 0 ? (
