@@ -1,4 +1,5 @@
 import { render, screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
 import { formatCurrency } from "@/lib/format";
@@ -126,8 +127,11 @@ vi.mock("@/hooks/use-crm-data", () => ({
 import HomePage from "@/app/page";
 
 describe("pipeline calculations", () => {
-  it("treats proposed events the same as bid sent for pipeline totals", () => {
+  it("treats proposed events the same as bid sent for pipeline totals", async () => {
     render(<HomePage />);
+
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("tab", { name: /Leads and ARR/i }));
 
     const pipelineCard = screen.getByText(/Pipeline value/i).closest("div");
     expect(pipelineCard).not.toBeNull();

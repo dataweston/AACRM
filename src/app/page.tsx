@@ -146,7 +146,7 @@ export default function HomePage() {
     sendWixInvoice,
     collectWixPayment,
   } = useCrmData();
-  const [activeTab, setActiveTab] = useState("overview");
+  const [activeTab, setActiveTab] = useState("records");
   const [vendorSearch, setVendorSearch] = useState("");
   const [vendorServiceFilter, setVendorServiceFilter] = useState<string>("all");
   const [editingClientId, setEditingClientId] = useState<string | null>(null);
@@ -1009,12 +1009,12 @@ export default function HomePage() {
       <main className="mx-auto w-full max-w-6xl px-4 py-10 sm:py-12">
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
           <TabsList className="flex w-full flex-wrap justify-start gap-2 bg-muted/70 p-2 text-xs sm:text-sm">
-            <TabsTrigger value="overview">Overview</TabsTrigger>
             <TabsTrigger value="records">Records</TabsTrigger>
+            <TabsTrigger value="leads-arr">Leads and ARR</TabsTrigger>
             <TabsTrigger value="billing">Billing</TabsTrigger>
           </TabsList>
 
-          <TabsContent value="overview" className="space-y-6">
+          <TabsContent value="leads-arr" className="space-y-6">
             <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
               <Card className="bg-card/90">
                 <CardHeader className="pb-2 space-y-3">
