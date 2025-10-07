@@ -146,6 +146,8 @@ export default function HomePage() {
     sendWixInvoice,
     collectWixPayment,
   } = useCrmData();
+  const [activeTab, setActiveTab] = useState("records");
+  const [vendorSearch, setVendorSearch] = useState("");
   const [activeTab, setActiveTab] = useState("overview");
   const [recordsSearch, setRecordsSearch] = useState("");
   const [vendorServiceFilter, setVendorServiceFilter] = useState<string>("all");
@@ -1093,6 +1095,10 @@ export default function HomePage() {
 
       <main className="mx-auto w-full max-w-6xl px-4 py-10 sm:py-12">
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
+          <TabsList className="flex w-full flex-wrap justify-start gap-2 bg-muted/70 p-2 text-xs sm:text-sm">
+            <TabsTrigger value="records">Records</TabsTrigger>
+            <TabsTrigger value="leads-arr">Leads and ARR</TabsTrigger>
+            <TabsTrigger value="billing">Billing</TabsTrigger>
           <TabsList className="flex w-full flex-nowrap gap-2 overflow-x-auto bg-muted/70 p-2 text-xs sm:text-sm">
             <TabsTrigger value="overview" className="flex-1 min-w-[92px] sm:min-w-[120px]">
               Overview
@@ -1104,6 +1110,60 @@ export default function HomePage() {
               Billing
             </TabsTrigger>
           </TabsList>
+
+          <TabsContent value="leads-arr" className="space-y-6">
+            <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+              <Card className="bg-card/90">
+                <CardHeader className="pb-2 space-y-3">
+                  <CardDescription>Pipeline value</CardDescription>
+                  <div className="flex flex-wrap gap-6">
+                    <div className="space-y-1">
+                      <p className="text-xs uppercase tracking-wide text-muted-foreground">Confirmed</p>
+                      <p className="text-3xl font-semibold text-foreground">
+                        {formatCurrency(overview.pipelineConfirmed)}
+                      </p>
+                    </div>
+                    <div className="space-y-1">
+                      <p className="text-xs uppercase tracking-wide text-muted-foreground">Proposed</p>
+                      <p className="text-3xl font-semibold text-foreground">
+                        {formatCurrency(overview.pipelineProposed)}
+                      </p>
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent className="text-xs text-muted-foreground">
+                  Confirmed reflects signed work minus collected deposits. Proposed totals active bids and outreach.
+                </CardContent>
+              </Card>
+              <Card className="bg-card/90">
+                <CardHeader className="pb-2">
+                  <CardDescription>Confirmed after vendor cost</CardDescription>
+                  <CardTitle className="text-3xl font-semibold">
+                    {formatCurrency(overview.confirmedAfterVendorCost)}
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="text-xs text-muted-foreground">
+                  Projects margin once vendor commitments are covered.
+                </CardContent>
+              </Card>
+              <Card className="bg-primary text-primary-foreground">
+                <CardHeader className="pb-2">
+                  <CardDescription className="text-primary-foreground/80">
+                    Currently held deposits
+                  </CardDescription>
+                  <CardTitle className="text-3xl font-semibold">
+                    {formatCurrency(overview.heldDeposits)}
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="text-xs text-primary-foreground/80">
+                  {overview.heldDepositCount === 0
+                    ? "Mark deposits as received in event records to track retainers."
+                    : `${overview.heldDepositCount} deposit${
+                        overview.heldDepositCount === 1 ? "" : "s"
+                      } received across active events.`}
+                </CardContent>
+              </Card>
+            </section>
 
           <TabsContent value="overview" className="space-y-6">
             <section className="grid gap-6 xl:grid-cols-[2fr_1fr]">
